@@ -91,8 +91,13 @@ def train_agent(episodes=10000, board_size=15, batch_size=32, update_target_ever
 if __name__ == "__main__":
     # Enable PyTorch optimizations
     torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
     
-    # Set number of threads for PyTorch
+    # Optimize tensor operations
+    torch.set_float32_matmul_precision('high')
+    
+    # Set number of threads for CPU operations
     torch.set_num_threads(4)
     
-    train_agent() 
+    # Increase batch size for better GPU utilization
+    train_agent(batch_size=64) 

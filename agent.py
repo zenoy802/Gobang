@@ -19,10 +19,23 @@ class DQNAgent:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Check available devices in order: CUDA -> MPS -> CPU
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            print("Using CUDA device:", torch.cuda.get_device_name(0))
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            print("Using MPS device")
+        else:
+            self.device = torch.device("cpu")
+            print("Using CPU device")
+        
         self.model = GobangNet(board_size).to(self.device)
         self.target_model = GobangNet(board_size).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        
+        # Enable automatic mixed precision for faster training
+        self.scaler = torch.cuda.amp.GradScaler()
         
         self.update_target_model()
 
@@ -41,8 +54,9 @@ class DQNAgent:
         if random.random() <= self.epsilon:
             return random.choice(valid_moves)
         
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        q_values = self.model(state_tensor).cpu().detach().numpy()[0]
+        with torch.cuda.amp.autocast():
+            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            q_values = self.model(state_tensor).cpu().detach().numpy()[0]
         
         # Mask invalid moves with very low values
         valid_moves_mask = np.ones_like(q_values) * float('-inf')
@@ -62,15 +76,18 @@ class DQNAgent:
         next_states = torch.FloatTensor(np.array([x[3] for x in batch])).to(self.device)
         dones = torch.FloatTensor(np.array([x[4] for x in batch])).to(self.device)
 
-        current_q_values = self.model(states).gather(1, actions.unsqueeze(1))
-        next_q_values = self.target_model(next_states).max(1)[0].detach()
-        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+        # Use automatic mixed precision for faster training
+        with torch.cuda.amp.autocast():
+            current_q_values = self.model(states).gather(1, actions.unsqueeze(1))
+            next_q_values = self.target_model(next_states).max(1)[0].detach()
+            target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+            loss = nn.MSELoss()(current_q_values.squeeze(), target_q_values)
 
-        loss = nn.MSELoss()(current_q_values.squeeze(), target_q_values)
-        
+        # Optimize with gradient scaling
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
