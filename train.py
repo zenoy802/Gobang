@@ -1,3 +1,8 @@
+"""
+Training script for the Gobang AI agent.
+Implements the main training loop and optimization settings.
+"""
+
 from agent import DQNAgent
 from environment import GobangEnv
 import numpy as np
@@ -6,6 +11,14 @@ from tqdm import tqdm
 import time
 
 def train_agent(episodes=10000, board_size=15, batch_size=32, update_target_every=100):
+    """
+    Train the DQN agent through self-play.
+    Args:
+        episodes (int): Number of episodes to train
+        board_size (int): Size of the game board
+        batch_size (int): Size of training batches
+        update_target_every (int): Episodes between target network updates
+    """
     env = GobangEnv(board_size)
     agent = DQNAgent(board_size)
     
@@ -89,15 +102,15 @@ def train_agent(episodes=10000, board_size=15, batch_size=32, update_target_ever
             agent.save(f"model_episode_{episode}.pth")
 
 if __name__ == "__main__":
-    # Enable PyTorch optimizations
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = False
+    # Enable PyTorch optimizations for faster training
+    torch.backends.cudnn.benchmark = True  # Optimize CUDA operations
+    torch.backends.cudnn.deterministic = False  # Allow non-deterministic optimizations
     
-    # Optimize tensor operations
+    # Set high precision for matrix operations
     torch.set_float32_matmul_precision('high')
     
-    # Set number of threads for CPU operations
+    # Optimize CPU thread usage
     torch.set_num_threads(4)
     
-    # Increase batch size for better GPU utilization
+    # Start training with increased batch size for better GPU utilization
     train_agent(batch_size=64) 

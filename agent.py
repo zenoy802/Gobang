@@ -1,3 +1,8 @@
+"""
+DQN Agent implementation for the Gobang game.
+Implements Deep Q-Learning with experience replay and target network.
+"""
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,8 +13,25 @@ import os
 from model import GobangNet
 
 class DQNAgent:
+    """
+    Deep Q-Learning agent with experience replay and target network.
+    Implements epsilon-greedy exploration and automatic device selection (CUDA/MPS/CPU).
+    """
+    
     def __init__(self, board_size=15, memory_size=10000, batch_size=64, gamma=0.99,
                  epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, learning_rate=0.001):
+        """
+        Initialize the DQN agent.
+        Args:
+            board_size (int): Size of the game board
+            memory_size (int): Size of replay buffer
+            batch_size (int): Size of training batch
+            gamma (float): Discount factor for future rewards
+            epsilon (float): Initial exploration rate
+            epsilon_min (float): Minimum exploration rate
+            epsilon_decay (float): Rate at which epsilon decays
+            learning_rate (float): Learning rate for optimizer
+        """
         self.board_size = board_size
         self.action_size = board_size * board_size
         self.memory = deque(maxlen=memory_size)
@@ -40,17 +62,27 @@ class DQNAgent:
         self.update_target_model()
 
     def update_target_model(self):
+        """Copy weights from training model to target model"""
         self.target_model.load_state_dict(self.model.state_dict())
 
     def remember(self, state, action, reward, next_state, done):
+        """Store a single transition in replay memory"""
         self.memory.append((state, action, reward, next_state, done))
 
     def remember_batch(self, states, actions, rewards, next_states, dones):
-        """Add a batch of experiences to memory"""
+        """Store a batch of transitions in replay memory"""
         for s, a, r, ns, d in zip(states, actions, rewards, next_states, dones):
             self.memory.append((s, a, r, ns, d))
 
     def act(self, state, valid_moves):
+        """
+        Choose an action using epsilon-greedy policy.
+        Args:
+            state: Current game state
+            valid_moves: List of valid moves
+        Returns:
+            int: Chosen action
+        """
         if random.random() <= self.epsilon:
             return random.choice(valid_moves)
         
@@ -66,6 +98,10 @@ class DQNAgent:
         return np.argmax(q_values)
 
     def train(self):
+        """
+        Train the network on a batch of experiences.
+        Uses automatic mixed precision for faster training.
+        """
         if len(self.memory) < self.batch_size:
             return
         
