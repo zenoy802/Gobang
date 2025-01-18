@@ -129,6 +129,7 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
     def save(self, filename):
+        """Save model checkpoint"""
         os.makedirs("checkpoint", exist_ok=True)
         torch.save({
             'model_state_dict': self.model.state_dict(),
