@@ -9,6 +9,46 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import time
+import matplotlib.pyplot as plt
+from collections import deque
+
+def plot_metrics(rewards, losses, avg_window=100):
+    """
+    Plot training metrics.
+    Args:
+        rewards (list): Episode rewards
+        losses (list): Training losses
+        avg_window (int): Window size for moving average
+    """
+    plt.figure(figsize=(12, 5))
+    
+    # Plot rewards
+    plt.subplot(1, 2, 1)
+    plt.plot(rewards, alpha=0.3, label='Raw Rewards')
+    # Calculate and plot moving average
+    moving_avg = np.convolve(rewards, np.ones(avg_window)/avg_window, mode='valid')
+    plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.title('Training Rewards')
+    plt.legend()
+    plt.grid(True)
+    
+    # Plot losses
+    plt.subplot(1, 2, 2)
+    plt.plot(losses, alpha=0.3, label='Raw Losses')
+    # Calculate and plot moving average
+    moving_avg = np.convolve(losses, np.ones(avg_window)/avg_window, mode='valid')
+    plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
+    plt.xlabel('Training Step')
+    plt.ylabel('Loss')
+    plt.title('Training Losses')
+    plt.legend()
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('training_metrics.png')
+    plt.close()
 
 def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_every=100):
     """
@@ -33,16 +73,22 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
     agent.model.train()
     agent.target_model.eval()
     
+    # Metrics tracking
+    episode_rewards = []
+    training_losses = []
+    recent_rewards = deque(maxlen=100)  # For tracking moving average
+    
     # Use tqdm for progress tracking
     pbar = tqdm(range(episodes), desc="Training")
     
     best_reward = float('-inf')
-    episode_rewards = []
+    best_avg_reward = float('-inf')
     
     for episode in pbar:
         state = env.reset()
         total_reward = 0
         moves = 0
+        episode_losses = []
         
         # Pre-allocate tensors for batch processing
         states_batch = []
@@ -75,7 +121,9 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
                     next_states_batch, 
                     dones_batch
                 )
-                agent.train()
+                loss = agent.train()
+                if loss is not None:
+                    episode_losses.append(loss)
                 
                 # Clear batches
                 states_batch = []
@@ -89,29 +137,43 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
                 
             state = next_state
         
+        # Record metrics
         episode_rewards.append(total_reward)
+        recent_rewards.append(total_reward)
+        if episode_losses:
+            training_losses.extend(episode_losses)
+        
+        # Calculate average reward
+        avg_reward = np.mean(recent_rewards)
         
         # Update progress bar with useful metrics
         pbar.set_postfix({
             'reward': f'{total_reward:.2f}',
+            'avg_reward': f'{avg_reward:.2f}',
             'epsilon': f'{agent.epsilon:.2f}',
-            'moves': moves,
-            'avg_reward': f'{np.mean(episode_rewards[-100:]):.2f}'
+            'moves': moves
         })
         
-        # Save best model and update target network
+        # Save best models
         if total_reward > best_reward:
             best_reward = total_reward
             agent.save("best_model.pth")
             
+        if avg_reward > best_avg_reward:
+            best_avg_reward = avg_reward
+            agent.save("best_avg_model.pth")
+            
         if episode % update_target_every == 0:
             agent.update_target_model()
             agent.save(f"model_episode_{episode}.pth")
+            
+            # Plot metrics every N episodes
+            plot_metrics(episode_rewards, training_losses)
 
 if __name__ == "__main__":
     # Enable PyTorch optimizations for faster training
-    torch.backends.cudnn.benchmark = True  # Optimize CUDA operations
-    torch.backends.cudnn.deterministic = False  # Allow non-deterministic optimizations
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
     
     # Set high precision for matrix operations
     torch.set_float32_matmul_precision('high')
@@ -120,4 +182,4 @@ if __name__ == "__main__":
     torch.set_num_threads(4)
     
     # Start training with increased batch size for better GPU utilization
-    train_agent(batch_size=64) 
+    train_agent() 

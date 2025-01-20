@@ -101,9 +101,11 @@ class DQNAgent:
         """
         Train the network on a batch of experiences.
         Uses automatic mixed precision for faster training.
+        Returns:
+            float: The training loss value
         """
         if len(self.memory) < self.batch_size:
-            return
+            return None
         
         batch = random.sample(self.memory, self.batch_size)
         states = torch.FloatTensor(np.array([x[0] for x in batch])).to(self.device)
@@ -127,6 +129,8 @@ class DQNAgent:
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+        
+        return loss.item()
 
     def save(self, filename):
         """Save model checkpoint"""
