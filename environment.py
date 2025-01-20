@@ -56,14 +56,16 @@ class GobangEnv:
 
         if self._check_win(row, col):
             self.done = True
-            return self.get_state(), 1, True
+            return self.get_state(), 10, True  # Increased reward for winning
 
         if len(self.get_valid_moves()) == 0:
             self.done = True
             return self.get_state(), 0, True
 
+        # Add reward for creating potential winning positions
+        potential_score = self._evaluate_position(row, col)
         self.current_player = -self.current_player
-        return self.get_state(), 0, False
+        return self.get_state(), potential_score, False
 
     def _check_win(self, row, col):
         """
@@ -99,4 +101,37 @@ class GobangEnv:
             
             if count >= 5:
                 return True
-        return False 
+        return False
+
+    def _evaluate_position(self, row, col):
+        """Evaluate the potential of a position"""
+        player = self.board[row, col]
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        total_score = 0
+        
+        for dr, dc in directions:
+            count = 1
+            spaces = 0
+            # Count in both directions
+            for direction in [1, -1]:
+                r, c = row + dr * direction, col + dc * direction
+                while (0 <= r < self.board_size and 
+                       0 <= c < self.board_size and 
+                       (self.board[r, c] == player or self.board[r, c] == 0) and
+                       spaces <= 2):
+                    if self.board[r, c] == player:
+                        count += 1
+                    else:
+                        spaces += 1
+                    r += dr * direction
+                    c += dc * direction
+            
+            # Score based on consecutive stones and spaces
+            if count >= 4:
+                total_score += 0.5
+            elif count >= 3:
+                total_score += 0.3
+            elif count >= 2:
+                total_score += 0.1
+        
+        return total_score 

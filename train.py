@@ -10,7 +10,7 @@ import torch
 from tqdm import tqdm
 import time
 
-def train_agent(episodes=10000, board_size=15, batch_size=32, update_target_every=100):
+def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_every=100):
     """
     Train the DQN agent through self-play.
     Args:
@@ -20,7 +20,14 @@ def train_agent(episodes=10000, board_size=15, batch_size=32, update_target_ever
         update_target_every (int): Episodes between target network updates
     """
     env = GobangEnv(board_size)
-    agent = DQNAgent(board_size)
+    agent = DQNAgent(board_size, 
+                     memory_size=100000,  # Increased memory size
+                     batch_size=batch_size,
+                     gamma=0.99,
+                     epsilon=1.0,
+                     epsilon_min=0.01,
+                     epsilon_decay=0.9995,  # Slower epsilon decay
+                     learning_rate=0.0001)  # Lower learning rate
     
     # Enable training mode for faster training
     agent.model.train()

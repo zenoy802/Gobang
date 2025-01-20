@@ -8,8 +8,8 @@ class GobangNet(nn.Module):
     Takes a board state as input and outputs Q-values for all possible actions.
     
     Architecture:
-    1. Three convolutional layers for spatial feature extraction
-    2. Two fully connected layers for action value prediction
+    1. Four convolutional layers with batch normalization
+    2. Two fully connected layers with dropout
     """
     
     def __init__(self, board_size=15):
@@ -21,14 +21,22 @@ class GobangNet(nn.Module):
         super(GobangNet, self).__init__()
         self.board_size = board_size
         
-        # Convolutional layers for feature extraction
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)  # Input -> 32 features
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)  # 32 -> 64 features
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)  # 64 -> 128 features
+        # Convolutional layers with batch normalization
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.conv4 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
         
-        # Fully connected layers for Q-value prediction
-        self.fc1 = nn.Linear(128 * board_size * board_size, 512)  # Flatten -> 512 neurons
-        self.fc2 = nn.Linear(512, board_size * board_size)  # 512 -> action space
+        # Fully connected layers with dropout
+        self.fc1 = nn.Linear(256 * board_size * board_size, 1024)
+        self.dropout1 = nn.Dropout(0.3)
+        self.fc2 = nn.Linear(1024, 512)
+        self.dropout2 = nn.Dropout(0.3)
+        self.fc3 = nn.Linear(512, board_size * board_size)
 
     def forward(self, x):
         """
@@ -38,14 +46,18 @@ class GobangNet(nn.Module):
         Returns:
             tensor: Q-values for each possible action
         """
-        # Apply convolutions with ReLU activation
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        # Convolutional layers with ReLU and batch norm
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
         
         # Flatten and apply fully connected layers
-        x = x.view(-1, 128 * self.board_size * self.board_size)
+        x = x.view(-1, 256 * self.board_size * self.board_size)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)  # No activation on final layer (Q-values can be negative)
+        x = self.dropout1(x)
+        x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.fc3(x)
         
         return x 

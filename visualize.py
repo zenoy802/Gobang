@@ -155,4 +155,4 @@ if __name__ == "__main__":
     # Uncomment one of these to run different modes:
     # visualizer.agent_vs_agent("model_episode_1000.pth", 
     #                          "model_episode_2000.pth")
-    visualizer.human_vs_agent("model_episode_2000.pth") 
+    visualizer.human_vs_agent("model_episode_9900.pth") 
