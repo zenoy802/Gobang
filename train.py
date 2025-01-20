@@ -50,7 +50,7 @@ def plot_metrics(rewards, losses, avg_window=100):
     plt.savefig('training_metrics.png')
     plt.close()
 
-def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_every=100):
+def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_every=100, save_model_every=1000):
     """
     Train the DQN agent through self-play.
     Args:
@@ -165,10 +165,12 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
             
         if episode % update_target_every == 0:
             agent.update_target_model()
-            agent.save(f"model_episode_{episode}.pth")
             
             # Plot metrics every N episodes
             plot_metrics(episode_rewards, training_losses)
+
+        if episode % save_model_every == 0:
+            agent.save(f"model_episode_{episode}.pth")
 
 if __name__ == "__main__":
     # Enable PyTorch optimizations for faster training
