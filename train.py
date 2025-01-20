@@ -21,26 +21,32 @@ def plot_metrics(rewards, losses, avg_window=100):
         losses (list): Training losses
         avg_window (int): Window size for moving average
     """
+    if not rewards:  # Skip if no data
+        return
+        
     plt.figure(figsize=(12, 5))
     
     # Plot rewards
     plt.subplot(1, 2, 1)
     plt.plot(rewards, alpha=0.3, label='Raw Rewards')
-    # Calculate and plot moving average
-    moving_avg = np.convolve(rewards, np.ones(avg_window)/avg_window, mode='valid')
-    plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
+    # Calculate and plot moving average if enough data
+    if len(rewards) >= avg_window:
+        moving_avg = np.convolve(rewards, np.ones(avg_window)/avg_window, mode='valid')
+        plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.title('Training Rewards')
     plt.legend()
     plt.grid(True)
     
-    # Plot losses
+    # Plot losses only if we have loss data
     plt.subplot(1, 2, 2)
-    plt.plot(losses, alpha=0.3, label='Raw Losses')
-    # Calculate and plot moving average
-    moving_avg = np.convolve(losses, np.ones(avg_window)/avg_window, mode='valid')
-    plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
+    if losses:
+        plt.plot(losses, alpha=0.3, label='Raw Losses')
+        # Calculate and plot moving average if enough data
+        if len(losses) >= avg_window:
+            moving_avg = np.convolve(losses, np.ones(avg_window)/avg_window, mode='valid')
+            plt.plot(moving_avg, label=f'Moving Average ({avg_window})')
     plt.xlabel('Training Step')
     plt.ylabel('Loss')
     plt.title('Training Losses')
@@ -51,7 +57,7 @@ def plot_metrics(rewards, losses, avg_window=100):
     plt.savefig('training_metrics.png')
     plt.close()
 
-def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_every=100, 
+def train_agent(episodes=20000, board_size=15, batch_size=256, update_target_every=100, 
                 save_model_every=1000, num_best_models=5):
     """
     Train the DQN agent through self-play.
@@ -156,7 +162,7 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
             'avg_reward': f'{avg_reward:.2f}',
             'epsilon': f'{agent.epsilon:.2f}',
             'moves': moves,
-            'best_reward': f'{max([r for r, _ in best_models], default=0):.2f}'
+            'best_reward': f'{max([r for r, _, _ in best_models], default=0):.2f}'
         })
         
         # Update best models list
@@ -185,7 +191,8 @@ def train_agent(episodes=20000, board_size=15, batch_size=128, update_target_eve
             
         if episode % update_target_every == 0:
             agent.update_target_model()
-            plot_metrics(episode_rewards, training_losses)
+            if episode_losses:  # Only plot if we have loss data
+                plot_metrics(episode_rewards, training_losses)
         
         if episode % save_model_every == 0:
             agent.save(f"model_episode_{episode}.pth")
