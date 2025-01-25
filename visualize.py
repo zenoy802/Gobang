@@ -8,6 +8,7 @@ import numpy as np
 from agent import DQNAgent
 from environment import GobangEnv
 import time
+import os
 
 class GobangVisualizer:
     """
@@ -118,7 +119,7 @@ class GobangVisualizer:
             agent_path (str): Path to agent's checkpoint
         """
         agent = DQNAgent(self.board_size)
-        agent.load(agent_path)
+        agent.load(os.path.join("checkpoint", agent_path))
         
         state = self.env.reset()
         running = True

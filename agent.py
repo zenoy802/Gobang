@@ -139,10 +139,11 @@ class DQNAgent:
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'epsilon': self.epsilon
-        }, f"checkpoint/{filename}")
+        }, os.path.join("checkpoint", filename))
 
     def load(self, filename):
-        checkpoint = torch.load(f"checkpoint/{filename}")
+        """Load model checkpoint with proper device mapping"""
+        checkpoint = torch.load(filename, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.epsilon = checkpoint['epsilon']
