@@ -131,13 +131,21 @@ class GobangVisualizer:
         
         pygame.quit()
 
-    def human_vs_agent(self, agent_path):
+    def human_vs_agent(self, agent_path, agent_type="dqn"):
         """
         Run a game between human player and trained agent.
         Args:
             agent_path (str): Path to agent's checkpoint
+            agent_type (str): Type of agent ("dqn" or "ppo")
         """
-        agent = DQNAgent(self.board_size)
+        # Initialize agent based on type
+        if agent_type == "ppo":
+            from ppo_agent import PPOAgent
+            agent = PPOAgent(self.board_size)
+        else:
+            from agent import DQNAgent
+            agent = DQNAgent(self.board_size)
+        
         agent.load(os.path.join("checkpoint", agent_path))
         
         state = self.env.reset()
@@ -164,7 +172,10 @@ class GobangVisualizer:
                             state, reward, done = self.env.step(action)
             else:  # Agent's turn
                 valid_moves = self.env.get_valid_moves()
-                action = agent.act(state, valid_moves)
+                if agent_type == "ppo":
+                    action, _, _ = agent.act(state, valid_moves)
+                else:
+                    action = agent.act(state, valid_moves)
                 state, reward, done = self.env.step(action)
         
         pygame.quit()
@@ -175,4 +186,5 @@ if __name__ == "__main__":
     # Uncomment one of these to run different modes:
     # visualizer.agent_vs_agent("model_episode_1000.pth", 
     #                          "model_episode_2000.pth")
-    visualizer.human_vs_agent("best_model_r87.5_e4413.pth") 
+    visualizer.human_vs_agent("best_model_r87.5_e4413.pth", agent_type="dqn")
+    # visualizer.human_vs_agent("ppo_model_r45.2_e1234.pth", agent_type="ppo") 
