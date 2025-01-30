@@ -78,18 +78,31 @@ class GobangVisualizer:
             return y * self.board_size + x
         return None
 
-    def agent_vs_agent(self, agent1_path, agent2_path, delay=1.0):
+    def agent_vs_agent(self, agent1_path, agent2_path, agent1_type="dqn", agent2_type="dqn", delay=1.0):
         """
         Run a game between two trained agents.
         Args:
             agent1_path (str): Path to first agent's checkpoint
             agent2_path (str): Path to second agent's checkpoint
+            agent1_type (str): Type of first agent ("dqn" or "ppo")
+            agent2_type (str): Type of second agent ("dqn" or "ppo")
             delay (float): Delay between moves in seconds
         """
-        agent1 = DQNAgent(self.board_size)
-        agent2 = DQNAgent(self.board_size)
-        agent1.load(agent1_path)
-        agent2.load(agent2_path)
+        # Initialize agents based on their types
+        if agent1_type == "ppo":
+            from ppo_agent import PPOAgent
+            agent1 = PPOAgent(self.board_size)
+        else:
+            agent1 = DQNAgent(self.board_size)
+        
+        if agent2_type == "ppo":
+            from ppo_agent import PPOAgent
+            agent2 = PPOAgent(self.board_size)
+        else:
+            agent2 = DQNAgent(self.board_size)
+        
+        agent1.load(os.path.join("checkpoint", agent1_path))
+        agent2.load(os.path.join("checkpoint", agent2_path))
         
         state = self.env.reset()
         running = True
@@ -101,8 +114,14 @@ class GobangVisualizer:
             
             if not self.env.done:
                 current_agent = agent1 if self.env.current_player == 1 else agent2
+                agent_type = agent1_type if self.env.current_player == 1 else agent2_type
                 valid_moves = self.env.get_valid_moves()
-                action = current_agent.act(state, valid_moves)
+                
+                if agent_type == "ppo":
+                    action, _, _ = current_agent.act(state, valid_moves)
+                else:
+                    action = current_agent.act(state, valid_moves)
+                
                 state, reward, done = self.env.step(action)
                 
                 self.draw_board()
