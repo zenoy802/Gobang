@@ -49,9 +49,89 @@ def plot_ppo_metrics(rewards, losses, avg_window=100):
     plt.savefig('ppo_training_metrics.png')
     plt.close()
 
+class ModelEvaluator:
+    """Evaluates model performance through tournaments and benchmark testing"""
+    def __init__(self, board_size=15, n_evaluation_games=50):
+        self.board_size = board_size
+        self.n_evaluation_games = n_evaluation_games
+        self.env = GobangEnv(board_size)
+        
+        # Create a benchmark agent (could be loaded from a known strong model)
+        self.benchmark_agent = PPOAgent(board_size)
+        benchmark_path = "benchmark_model.pth"  # A stable, strong model
+        if os.path.exists(os.path.join("checkpoint", benchmark_path)):
+            self.benchmark_agent.load(os.path.join("checkpoint", benchmark_path))
+    
+    def evaluate_against_benchmark(self, candidate_agent):
+        """Evaluate agent against benchmark agent"""
+        wins = 0
+        draws = 0
+        
+        for game in range(self.n_evaluation_games):
+            # Play both as black and white alternately
+            if game % 2 == 0:
+                result = self._play_game(candidate_agent, self.benchmark_agent)
+            else:
+                result = self._play_game(self.benchmark_agent, candidate_agent)
+                # Invert result since candidate played as white
+                result = -result if result != 0 else 0
+            
+            if result > 0:
+                wins += 1
+            elif result == 0:
+                draws += 0.5
+        
+        return (wins + draws) / self.n_evaluation_games
+    
+    def evaluate_against_previous_best(self, candidate_agent, previous_best_models):
+        """Evaluate agent against previous best models"""
+        if not previous_best_models:
+            return 0.0
+        
+        total_score = 0
+        
+        for prev_model_data in previous_best_models:
+            # Load previous best model
+            prev_agent = PPOAgent(self.board_size)
+            prev_agent.load(os.path.join("checkpoint", prev_model_data[2]))  # filename is at index 2
+            
+            # Play against previous best
+            score = 0
+            for game in range(self.n_evaluation_games // len(previous_best_models)):
+                if game % 2 == 0:
+                    result = self._play_game(candidate_agent, prev_agent)
+                else:
+                    result = self._play_game(prev_agent, candidate_agent)
+                    result = -result if result != 0 else 0
+                
+                if result > 0:
+                    score += 1
+                elif result == 0:
+                    score += 0.5
+            
+            total_score += score / (self.n_evaluation_games // len(previous_best_models))
+        
+        return total_score / len(previous_best_models)
+    
+    def _play_game(self, black_agent, white_agent):
+        """Play a single game between two agents"""
+        state = self.env.reset()
+        done = False
+        
+        while not done:
+            valid_moves = self.env.get_valid_moves()
+            current_agent = black_agent if self.env.current_player == 1 else white_agent
+            
+            with torch.no_grad():
+                action, _, _ = current_agent.act(state, valid_moves)
+            
+            state, reward, done = self.env.step(action)
+        
+        return reward
+
 def train_ppo_agent(episodes=20000, board_size=15, batch_size=256, save_every=1000, num_best_models=5, 
                     resume_from=None, start_episode=0):
-    """Train PPO agents using self-play"""
+    """Train PPO agents using self-play with improved model selection"""
     env = GobangEnv(board_size)
     
     # Create two agents
@@ -91,15 +171,27 @@ def train_ppo_agent(episodes=20000, board_size=15, batch_size=256, save_every=10
             metrics = np.load(metrics_path)
             episode_rewards = list(metrics['rewards'])
             training_losses = list(metrics['losses'])
-            # Add win rate to loaded best models
-            best_models = [(r, e, f, 0.0) for r, e, f in zip(metrics['best_rewards'], 
-                                                            metrics['best_episodes'], 
-                                                            metrics['best_filenames'])]
+            
+            # Load best models and verify they exist
+            best_models = []
+            for r, e, f in zip(metrics['best_rewards'], metrics['best_episodes'], metrics['best_filenames']):
+                model_path = os.path.join("checkpoint", str(f))
+                if os.path.exists(model_path):
+                    best_models.append((r, e, str(f), 0.0))
+                else:
+                    print(f"Warning: Best model file not found: {f}")
+            
+            if not best_models:
+                print("No existing best models found, starting fresh best models list")
+                # Add the resume model as the first best model
+                best_models = [(0.0, start_episode, resume_from, 0.0)]
+            
             print(f"Loaded {len(episode_rewards)} previous episodes of metrics")
+            print(f"Loaded {len(best_models)} previous best models")
         else:
             episode_rewards = []
             training_losses = []
-            best_models = []
+            best_models = [(0.0, start_episode, resume_from, 0.0)]  # Start with resume model
     else:
         episode_rewards = []
         training_losses = []
@@ -113,6 +205,9 @@ def train_ppo_agent(episodes=20000, board_size=15, batch_size=256, save_every=10
     # Track win rates for model updates
     evaluation_window = 100
     win_rates = deque(maxlen=evaluation_window)
+    
+    # Initialize model evaluator
+    evaluator = ModelEvaluator(board_size)
     
     pbar = tqdm(range(start_episode, episodes), desc="PPO Training")
     
@@ -174,26 +269,46 @@ def train_ppo_agent(episodes=20000, board_size=15, batch_size=256, save_every=10
             # Update best agent if training agent is performing well
             if len(win_rates) == evaluation_window:
                 win_rate = sum(win_rates) / len(win_rates)
-                if win_rate > 0.55:  # Training agent is winning more than 55% of games
-                    print(f"\nUpdating best agent (win rate: {win_rate:.2f})")
-                    # Copy the entire state from agent2 to agent1
-                    agent1.load_state_dict(agent2.state_dict())
-                    win_rates.clear()  # Reset win rate tracking
+                if win_rate > 0.55:  # Initial filter to save evaluation time
+                    # Evaluate the candidate model
+                    # benchmark_score = evaluator.evaluate_against_benchmark(agent2)
+                    benchmark_score = 0
+                    historical_score = evaluator.evaluate_against_previous_best(agent2, best_models)
                     
-                    # Save as one of the best models
-                    model_filename = f"ppo_model_r{total_reward:.1f}_e{episode}_wr{win_rate:.2f}.pth"
-                    agent2.save(model_filename)
-                    best_models.append((total_reward, episode, model_filename, win_rate))
-                    best_models.sort(key=lambda x: (x[3], x[0]), reverse=True)  # Sort by win rate, then reward
+                    # Combined score weighing both benchmark and historical performance
+                    total_score = 0.6 * benchmark_score + 0.4 * historical_score
                     
-                    if len(best_models) > num_best_models:
-                        old_filename = os.path.join("checkpoint", best_models[-1][2])
-                        try:
-                            if os.path.exists(old_filename):
-                                os.remove(old_filename)
-                        except Exception as e:
-                            print(f"Warning: Could not remove old model file {old_filename}: {e}")
-                        best_models = best_models[:num_best_models]
+                    print(f"\nEvaluation Results:")
+                    print(f"Benchmark Score: {benchmark_score:.2f}")
+                    print(f"Historical Score: {historical_score:.2f}")
+                    print(f"Total Score: {total_score:.2f}")
+                    
+                    # Update if the model shows strong performance
+                    if total_score > 0.55:  # Threshold for accepting new best model
+                        print(f"Updating best agent (total score: {total_score:.2f})")
+                        agent1.load_state_dict(agent2.state_dict())
+                        win_rates.clear()
+                        
+                        # Save as one of the best models
+                        model_filename = f"ppo_model_r{total_reward:.1f}_e{episode}_s{total_score:.2f}.pth"
+                        agent2.save(model_filename)
+                        
+                        # Verify the file was saved before adding to best_models
+                        if os.path.exists(os.path.join("checkpoint", model_filename)):
+                            best_models.append((total_reward, episode, model_filename, total_score))
+                            best_models.sort(key=lambda x: x[3], reverse=True)  # Sort by total score
+                            
+                            # Remove old model file only after verifying new one exists
+                            if len(best_models) > num_best_models:
+                                old_filename = os.path.join("checkpoint", best_models[-1][2])
+                                try:
+                                    if os.path.exists(old_filename):
+                                        os.remove(old_filename)
+                                        best_models = best_models[:num_best_models]
+                                except Exception as e:
+                                    print(f"Warning: Could not remove old model file {old_filename}: {e}")
+                        else:
+                            print(f"Warning: Failed to save new best model {model_filename}")
             
             # Record metrics
             episode_rewards.append(total_reward)
