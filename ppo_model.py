@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
+import random
 
 class PPOGobangNet(nn.Module):
     """
@@ -51,8 +52,17 @@ class PPOGobangNet(nn.Module):
         
         return policy, value
 
-    def get_action(self, state, valid_moves, device):
-        """Get action and its log probability"""
+    def get_action(self, state, valid_moves, device, epsilon=0.1):
+        """
+        Get action and its log probability using epsilon-greedy strategy.
+        Args:
+            state: Current game state
+            valid_moves: List of valid moves
+            device: Device to run computations on
+            epsilon: Probability of random exploration
+        Returns:
+            tuple: (action, log_prob, value)
+        """
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         policy, value = self(state)
         
@@ -61,11 +71,23 @@ class PPOGobangNet(nn.Module):
         mask[0, valid_moves] = 0
         policy = policy + mask
         
-        # Get action distribution
+        # Get action probabilities
         probs = F.softmax(policy, dim=-1)
-        dist = Categorical(probs)
+        dist = torch.distributions.Categorical(probs)
         
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
+        # Epsilon-greedy action selection
+        if random.random() > epsilon:
+            # Exploitation: choose action with highest probability
+            action = probs[0].argmax().item()
+        else:
+            # Exploration: sample from valid moves only
+            valid_probs = probs[0, valid_moves]
+            valid_probs = valid_probs / valid_probs.sum()  # Renormalize
+            valid_dist = torch.distributions.Categorical(valid_probs)
+            valid_action_idx = valid_dist.sample().item()
+            action = valid_moves[valid_action_idx]
         
-        return action.item(), log_prob, value 
+        # Get log probability of the chosen action
+        log_prob = dist.log_prob(torch.tensor([action]).to(device))
+        
+        return action, log_prob, value 

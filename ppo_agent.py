@@ -88,16 +88,17 @@ class PPOAgent:
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1000, gamma=0.95)
         
         # Add epsilon decay for exploration
-        self.clip_epsilon_start = clip_epsilon
-        self.clip_epsilon_end = 0.01
-        self.clip_epsilon_decay = 0.995
+        self.epsilon_start = 0.3
+        self.epsilon_end = 0.01
+        self.epsilon_decay = 0.9995
+        self.epsilon = self.epsilon_start
         
         # Initialize memory
         self.memory = PPOMemory()
     
     def act(self, state, valid_moves):
         """
-        Select action using the current policy.
+        Select action using the current policy with epsilon-greedy exploration.
         Args:
             state: Current game state
             valid_moves: List of valid moves
@@ -106,8 +107,17 @@ class PPOAgent:
         """
         self.model.eval()
         with torch.no_grad():
-            action, log_prob, value = self.model.get_action(state, valid_moves, self.device)
+            action, log_prob, value = self.model.get_action(
+                state, valid_moves, self.device, epsilon=self.epsilon
+            )
         self.model.train()
+        
+        # Decay epsilon
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon * self.epsilon_decay
+        )
+        
         return action, log_prob, value
     
     def remember(self, state, action, reward, next_state, log_prob, value, done):
@@ -200,7 +210,7 @@ class PPOAgent:
                 
                 # Use PPO-clip with additional KL divergence penalty
                 policy_loss = -torch.min(surr1, surr2).mean()
-                value_loss = F.mse_loss(value.squeeze(), batch_returns)
+                value_loss = F.mse_loss(value.view(-1), batch_returns.view(-1))
                 
                 # Add KL divergence penalty
                 kl_div = (batch_log_probs - curr_log_probs).mean()
@@ -215,21 +225,48 @@ class PPOAgent:
         
         # Update learning rate and clip epsilon
         self.scheduler.step()
-        self.clip_epsilon = max(
-            self.clip_epsilon_end,
-            self.clip_epsilon * self.clip_epsilon_decay
-        )
         
         self.memory.clear()
         return total_loss / (memory_size * self.n_epochs)
     
-    def save(self, filename):
-        """Save model checkpoint"""
-        os.makedirs("checkpoint", exist_ok=True)
-        torch.save({
+    def state_dict(self):
+        """Get state dictionary of the agent"""
+        return {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-        }, os.path.join("checkpoint", filename))
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'epsilon': self.epsilon
+        }
+    
+    def load_state_dict(self, state_dict):
+        """Load state dictionary into the agent with backward compatibility"""
+        self.model.load_state_dict(state_dict['model_state_dict'])
+        self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+        
+        # Handle new fields with backward compatibility
+        if 'scheduler_state_dict' in state_dict:
+            self.scheduler.load_state_dict(state_dict['scheduler_state_dict'])
+        else:
+            print("Warning: Loading checkpoint without scheduler state. Resetting scheduler.")
+            self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1000, gamma=0.95)
+        
+        if 'epsilon' in state_dict:
+            self.epsilon = state_dict['epsilon']
+        else:
+            print("Warning: Loading checkpoint without epsilon value. Using default.")
+            self.epsilon = self.epsilon_start
+    
+    def save(self, filename):
+        """Save model checkpoint with all necessary states"""
+        os.makedirs("checkpoint", exist_ok=True)
+        state_dict = {
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'epsilon': self.epsilon,
+            'version': 2  # Add version number for future compatibility
+        }
+        torch.save(state_dict, os.path.join("checkpoint", filename))
     
     def load(self, filename):
         """Load model checkpoint"""
@@ -237,10 +274,9 @@ class PPOAgent:
             checkpoint = torch.load(
                 filename, 
                 map_location=self.device,
-                weights_only=True  # Add this to address the warning
+                weights_only=True
             )
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.load_state_dict(checkpoint)
         except Exception as e:
             print(f"Error loading checkpoint {filename}: {e}")
             raise 
