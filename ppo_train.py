@@ -49,7 +49,19 @@ def plot_ppo_metrics(rewards, losses, avg_window=100):
     plt.savefig('ppo_training_metrics.png')
     plt.close()
 
-def train_ppo_agent(episodes=20000, board_size=15, batch_size=512, save_every=1000, num_best_models=5):
+def train_ppo_agent(episodes=20000, board_size=15, batch_size=512, save_every=1000, num_best_models=5, 
+                    resume_from=None, start_episode=0):
+    """
+    Train or continue training a PPO agent.
+    Args:
+        episodes (int): Number of episodes to train
+        board_size (int): Size of the game board
+        batch_size (int): Size of training batches
+        save_every (int): Episodes between saves
+        num_best_models (int): Number of best models to keep
+        resume_from (str): Path to checkpoint to resume from
+        start_episode (int): Episode number to start from when resuming
+    """
     env = GobangEnv(board_size)
     agent = PPOAgent(
         board_size=board_size,
@@ -63,61 +75,115 @@ def train_ppo_agent(episodes=20000, board_size=15, batch_size=512, save_every=10
         n_epochs=4  # Reduced number of epochs
     )
     
+    # Load checkpoint if resuming
+    if resume_from:
+        print(f"Resuming training from {resume_from}")
+        agent.load(os.path.join("checkpoint", resume_from))
+        
+        # Load training metrics if they exist
+        metrics_path = os.path.join("checkpoint", "ppo_training_metrics.npz")
+        if os.path.exists(metrics_path):
+            metrics = np.load(metrics_path)
+            episode_rewards = list(metrics['rewards'])
+            training_losses = list(metrics['losses'])
+            best_models = [(r, e, f) for r, e, f in zip(metrics['best_rewards'], 
+                                                       metrics['best_episodes'], 
+                                                       metrics['best_filenames'])]
+            print(f"Loaded {len(episode_rewards)} previous episodes of metrics")
+        else:
+            episode_rewards = []
+            training_losses = []
+            best_models = []
+    else:
+        episode_rewards = []
+        training_losses = []
+        best_models = []
+    
     # Metrics tracking
-    episode_rewards = []
-    training_losses = []
     recent_rewards = deque(maxlen=100)
-    best_models = []
+    if episode_rewards:
+        recent_rewards.extend(episode_rewards[-100:])
     
-    pbar = tqdm(range(episodes), desc="PPO Training")
+    pbar = tqdm(range(start_episode, episodes), desc="PPO Training")
     
-    for episode in pbar:
-        state = env.reset()
-        total_reward = 0
-        done = False
-        
-        while not done:
-            valid_moves = env.get_valid_moves()
-            action, log_prob, value = agent.act(state, valid_moves)
-            next_state, reward, done = env.step(action)
+    try:
+        for episode in pbar:
+            state = env.reset()
+            total_reward = 0
+            done = False
             
-            agent.remember(state, action, reward, next_state, log_prob, value, done)
-            total_reward += reward
-            state = next_state
+            while not done:
+                valid_moves = env.get_valid_moves()
+                action, log_prob, value = agent.act(state, valid_moves)
+                next_state, reward, done = env.step(action)
+                
+                agent.remember(state, action, reward, next_state, log_prob, value, done)
+                total_reward += reward
+                state = next_state
+                
+                # Train if enough samples
+                if len(agent.memory) >= batch_size:
+                    loss = agent.train()
+                    if loss is not None:
+                        training_losses.append(loss)
             
-            # Train if enough samples
-            if len(agent.memory) >= batch_size:
-                loss = agent.train()
-                if loss is not None:
-                    training_losses.append(loss)
-        
-        # Record metrics
-        episode_rewards.append(total_reward)
-        recent_rewards.append(total_reward)
-        avg_reward = np.mean(recent_rewards)
-        
-        # Update progress bar
-        pbar.set_postfix({
-            'reward': f'{total_reward:.2f}',
-            'avg_reward': f'{avg_reward:.2f}',
-            'best_reward': f'{max([r for r, _, _ in best_models], default=0):.2f}'
-        })
-        
-        # Update best models list
-        if not best_models or total_reward > best_models[-1][0] or len(best_models) < num_best_models:
-            model_filename = f"ppo_model_r{total_reward:.1f}_e{episode}.pth"
-            agent.save(model_filename)
-            best_models.append((total_reward, episode, model_filename))
-            best_models.sort(reverse=True)
+            # Record metrics
+            episode_rewards.append(total_reward)
+            recent_rewards.append(total_reward)
+            avg_reward = np.mean(recent_rewards)
             
-            if len(best_models) > num_best_models:
-                os.remove(os.path.join("checkpoint", best_models[-1][2]))
-                best_models = best_models[:num_best_models]
-        
-        # Regular saving and plotting
-        if episode % save_every == 0:
-            agent.save(f"ppo_model_episode_{episode}.pth")
-            plot_ppo_metrics(episode_rewards, training_losses)
+            # Update progress bar
+            pbar.set_postfix({
+                'reward': f'{total_reward:.2f}',
+                'avg_reward': f'{avg_reward:.2f}',
+                'best_reward': f'{max([r for r, _, _ in best_models], default=0):.2f}'
+            })
+            
+            # Update best models list
+            if not best_models or total_reward > best_models[-1][0] or len(best_models) < num_best_models:
+                model_filename = f"ppo_model_r{total_reward:.1f}_e{episode}.pth"
+                agent.save(model_filename)
+                best_models.append((total_reward, episode, model_filename))
+                best_models.sort(reverse=True)  # Sort by reward
+                
+                # Keep only top N models
+                if len(best_models) > num_best_models:
+                    old_filename = os.path.join("checkpoint", best_models[-1][2])
+                    try:
+                        if os.path.exists(old_filename):
+                            os.remove(old_filename)
+                    except Exception as e:
+                        print(f"Warning: Could not remove old model file {old_filename}: {e}")
+                    best_models = best_models[:num_best_models]
+            
+            # Regular saving and plotting
+            if episode % save_every == 0:
+                # Save current model
+                agent.save(f"ppo_model_episode_{episode}.pth")
+                
+                # Save metrics
+                try:
+                    np.savez(
+                        os.path.join("checkpoint", "ppo_training_metrics.npz"),
+                        rewards=np.array(episode_rewards),
+                        losses=np.array(training_losses),
+                        best_rewards=np.array([r for r, _, _ in best_models]),
+                        best_episodes=np.array([e for _, e, _ in best_models]),
+                        best_filenames=np.array([f for _, _, f in best_models])
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not save metrics: {e}")
+                
+                # Plot metrics
+                try:
+                    plot_ppo_metrics(episode_rewards, training_losses)
+                except Exception as e:
+                    print(f"Warning: Could not plot metrics: {e}")
+    
+    except KeyboardInterrupt:
+        print("\nTraining interrupted. Saving checkpoint...")
+        agent.save("ppo_interrupted.pth")
+        print("Checkpoint saved as 'ppo_interrupted.pth'")
     
     # Print final best models
     print("\nBest PPO models:")
@@ -128,4 +194,13 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision('high')
     torch.set_num_threads(4)
-    train_ppo_agent() 
+    
+    # To start new training:
+    # train_ppo_agent()
+    
+    # To resume training:
+    train_ppo_agent(
+        resume_from="ppo_model_r82.2_e18280.pth",
+        start_episode=18281,  # Start from next episode
+        episodes=25000  # Train for more episodes
+    ) 

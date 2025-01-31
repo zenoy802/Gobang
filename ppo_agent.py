@@ -217,6 +217,14 @@ class PPOAgent:
     
     def load(self, filename):
         """Load model checkpoint"""
-        checkpoint = torch.load(filename, map_location=self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict']) 
+        try:
+            checkpoint = torch.load(
+                filename, 
+                map_location=self.device,
+                weights_only=True  # Add this to address the warning
+            )
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        except Exception as e:
+            print(f"Error loading checkpoint {filename}: {e}")
+            raise 
