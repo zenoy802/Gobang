@@ -49,7 +49,7 @@ def plot_ppo_metrics(rewards, losses, avg_window=100):
     plt.savefig('ppo_training_metrics.png')
     plt.close()
 
-def train_ppo_agent(episodes=20000, board_size=15, batch_size=512, save_every=1000, num_best_models=5, 
+def train_ppo_agent(episodes=20000, board_size=15, batch_size=256, save_every=1000, num_best_models=5, 
                     resume_from=None, start_episode=0):
     """
     Train or continue training a PPO agent.
@@ -66,13 +66,13 @@ def train_ppo_agent(episodes=20000, board_size=15, batch_size=512, save_every=10
     agent = PPOAgent(
         board_size=board_size,
         batch_size=batch_size,
-        learning_rate=1e-4,
+        learning_rate=3e-4,  # Slightly higher learning rate
         gamma=0.99,
         gae_lambda=0.95,
-        clip_epsilon=0.2,
-        c1=0.5,  # Reduced value loss coefficient
-        c2=0.01,
-        n_epochs=4  # Reduced number of epochs
+        clip_epsilon=0.3,  # Higher initial clip epsilon
+        c1=0.5,  # Value loss coefficient
+        c2=0.02,  # Higher entropy coefficient for better exploration
+        n_epochs=8  # More epochs per update
     )
     
     # Load checkpoint if resuming

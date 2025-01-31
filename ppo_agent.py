@@ -84,6 +84,14 @@ class PPOAgent:
         self.model = PPOGobangNet(board_size).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         
+        # Add learning rate scheduler
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1000, gamma=0.95)
+        
+        # Add epsilon decay for exploration
+        self.clip_epsilon_start = clip_epsilon
+        self.clip_epsilon_end = 0.01
+        self.clip_epsilon_decay = 0.995
+        
         # Initialize memory
         self.memory = PPOMemory()
     
@@ -146,56 +154,58 @@ class PPOAgent:
         if len(self.memory) < self.batch_size:
             return None
         
-        memory_size = len(self.memory)  # Store size before clearing
-        # Convert stored experiences to tensors
+        memory_size = len(self.memory)
         states = torch.FloatTensor(np.array(self.memory.states)).to(self.device)
         actions = torch.LongTensor(self.memory.actions).to(self.device)
         old_log_probs = torch.stack(self.memory.log_probs).to(self.device)
         values = torch.stack(self.memory.values).squeeze().to(self.device)
         
-        # Compute advantages and returns
+        # Normalize rewards for better training stability
+        rewards = np.array(self.memory.rewards)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+        
+        # Compute advantages with normalized rewards
         advantages = self.compute_gae(
             values.cpu().numpy(),
-            self.memory.rewards,
+            rewards,
             self.memory.dones
         ).to(self.device)
+        
         returns = advantages + values
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         
-        # PPO update for n_epochs
         total_loss = 0
         for _ in range(self.n_epochs):
-            # Generate random mini-batches
             indices = np.random.permutation(len(self.memory))
             
             for start_idx in range(0, len(self.memory), self.batch_size):
                 end_idx = start_idx + self.batch_size
                 batch_indices = indices[start_idx:end_idx]
                 
-                # Get mini-batch
                 batch_states = states[batch_indices]
                 batch_actions = actions[batch_indices]
                 batch_log_probs = old_log_probs[batch_indices]
                 batch_advantages = advantages[batch_indices]
                 batch_returns = returns[batch_indices]
                 
-                # Get current policy and value predictions
                 policy, value = self.model(batch_states)
                 dist = torch.distributions.Categorical(logits=policy)
                 curr_log_probs = dist.log_prob(batch_actions)
                 entropy = dist.entropy().mean()
                 
-                # Calculate ratios and surrogate losses
+                # Calculate ratios and surrogate losses with dynamic clipping
                 ratios = torch.exp(curr_log_probs - batch_log_probs)
                 surr1 = ratios * batch_advantages
                 surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * batch_advantages
                 
-                # Calculate final losses
+                # Use PPO-clip with additional KL divergence penalty
                 policy_loss = -torch.min(surr1, surr2).mean()
                 value_loss = F.mse_loss(value.squeeze(), batch_returns)
-                loss = policy_loss + self.c1 * value_loss - self.c2 * entropy
                 
-                # Update network
+                # Add KL divergence penalty
+                kl_div = (batch_log_probs - curr_log_probs).mean()
+                loss = policy_loss + self.c1 * value_loss - self.c2 * entropy + 0.01 * kl_div.abs()
+                
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
@@ -203,9 +213,15 @@ class PPOAgent:
                 
                 total_loss += loss.item()
         
-        # Clear memory after update
+        # Update learning rate and clip epsilon
+        self.scheduler.step()
+        self.clip_epsilon = max(
+            self.clip_epsilon_end,
+            self.clip_epsilon * self.clip_epsilon_decay
+        )
+        
         self.memory.clear()
-        return total_loss / (memory_size * self.n_epochs)  # Use stored size
+        return total_loss / (memory_size * self.n_epochs)
     
     def save(self, filename):
         """Save model checkpoint"""
