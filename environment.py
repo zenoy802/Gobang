@@ -83,7 +83,10 @@ class GobangEnv:
         Returns:
             bool: True if the current player has won (exactly 5 consecutive stones)
         """
-        player = self.board[row, col]
+        # player = self.board[row, col]
+        player = self.current_player
+        if self.board[row, col] != player:
+            return False
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         
         for dr, dc in directions:
@@ -115,34 +118,61 @@ class GobangEnv:
         return False
 
     def _evaluate_position(self, row, col):
-        """Evaluate the potential of a position"""
-        player = self.board[row, col]
+        """
+        Evaluate the potential of a position based on:
+        1. Offensive potential (consecutive stones within 5 steps)
+        2. Defensive necessity (blocking opponent's winning moves)
+        """
+        # player = self.board[row, col]
+        player = self.current_player
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         total_score = 0
         
-        for dr, dc in directions:
-            count = 1
-            spaces = 0
-            # Count in both directions
-            for direction in [1, -1]:
-                r, c = row + dr * direction, col + dc * direction
-                while (0 <= r < self.board_size and 
-                       0 <= c < self.board_size and 
-                       (self.board[r, c] == player or self.board[r, c] == 0) and
-                       spaces <= 2):
-                    if self.board[r, c] == player:
-                        count += 1
-                    else:
-                        spaces += 1
-                    r += dr * direction
-                    c += dc * direction
+        def count_stones_in_direction(r, c, dr, dc, player, max_steps=3):
+            """Count consecutive stones and empty spaces within max_steps"""
+            count = 0
+            empty_spots = []
+            steps = 0
+            curr_r, curr_c = r, c
             
-            # Score based on consecutive stones and spaces
-            if count >= 4:
-                total_score += 0.5
-            elif count >= 3:
-                total_score += 0.3
-            elif count >= 2:
-                total_score += 0.1
+            while steps < max_steps and 0 <= curr_r < self.board_size and 0 <= curr_c < self.board_size:
+                if self.board[curr_r, curr_c] == player:
+                    count += 1
+                elif self.board[curr_r, curr_c] == 0:
+                    empty_spots.append((curr_r, curr_c))
+                else:  # Opponent stone
+                    break
+                steps += 1
+                curr_r += dr
+                curr_c += dc
+            
+            return count, empty_spots
+        
+        # Check each direction for both offensive and defensive potential
+        for dr, dc in directions:
+            # Check forward and backward for offensive potential
+            forward_count, forward_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, player)
+            backward_count, backward_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, player)
+            total_stones = forward_count + backward_count + 1  # +1 for current stone
+            
+            # Offensive scoring
+            if total_stones >= 4:
+                total_score += 3.0  # Immediate winning threat
+            elif total_stones == 3:
+                total_score += 0.5  # Strong potential
+            elif total_stones == 2:
+                total_score += 0.2  # Moderate potential
+            
+            # Check opponent's threats
+            opponent = -player
+            fwd_opponent_count, fwd_opponent_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, opponent)
+            bwd_opponent_count, bwd_opponent_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, opponent)
+            opponent_stones = fwd_opponent_count + bwd_opponent_count
+            
+            # Defensive scoring
+            if opponent_stones >= 3:
+                total_score += 1.5  # Critical defensive move
+            elif opponent_stones == 2 and (len(fwd_opponent_empty) + len(bwd_opponent_empty)) >= 2:
+                total_score += 0.8  # Potential defensive necessity
         
         return total_score 
