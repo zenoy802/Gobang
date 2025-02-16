@@ -49,6 +49,7 @@ class GobangEnv:
         row = action // self.board_size
         col = action % self.board_size
 
+        # TODO: check the reason avg reward decrease
         if self.board[row, col] != 0:
             return self.get_state(), -10, True
 
@@ -64,8 +65,14 @@ class GobangEnv:
 
         # Add reward for creating potential winning positions
         potential_score = self._evaluate_position(row, col)
+        # TODO: check if the player setup valid
         self.current_player = -self.current_player
         return self.get_state(), potential_score, False
+    
+    def _get_row_col(self, action):
+        row = action // self.board_size
+        col = action % self.board_size
+        return row, col
 
     def _check_win(self, row, col):
         """
@@ -74,30 +81,34 @@ class GobangEnv:
             row (int): Row of the last move
             col (int): Column of the last move
         Returns:
-            bool: True if the current player has won
+            bool: True if the current player has won (exactly 5 consecutive stones)
         """
         player = self.board[row, col]
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         
         for dr, dc in directions:
-            count = 1
+            count = 1  # Count the current stone
             # Check forward direction
             r, c = row + dr, col + dc
             while (0 <= r < self.board_size and 
-                   0 <= c < self.board_size and 
-                   self.board[r, c] == player):
-                count += 1
-                r += dr
-                c += dc
+                   0 <= c < self.board_size):
+                if self.board[r, c] == player:
+                    count += 1
+                    r += dr
+                    c += dc
+                else:
+                    break
             
             # Check backward direction
             r, c = row - dr, col - dc
             while (0 <= r < self.board_size and 
-                   0 <= c < self.board_size and 
-                   self.board[r, c] == player):
-                count += 1
-                r -= dr
-                c -= dc
+                   0 <= c < self.board_size):
+                if self.board[r, c] == player:
+                    count += 1
+                    r -= dr
+                    c -= dc
+                else:
+                    break
             
             if count >= 5:
                 return True

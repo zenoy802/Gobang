@@ -39,6 +39,9 @@ class GobangEnvTester:
         valid_moves = self.env.get_valid_moves()
         print("Valid moves:", valid_moves)
         print("Number of valid moves:", len(valid_moves))
+        for i in range(self.env.board_size**2):
+            if i not in valid_moves:
+                print(f"invalid_move: {self.env._get_row_col(i)}")
         return valid_moves
     
     def test_step(self, action):
@@ -93,20 +96,59 @@ def main():
     print("\n=== Testing Custom Board ===")
     custom_board = np.zeros((15, 15))
     custom_board[7:10, 7] = 1  # Three black stones in a row
-    custom_board[7, 8] = -1    # One white stone
+    custom_board[0, 0:5] = -1    # One white stone
     tester.set_board(custom_board)
     tester.test_valid_moves()
     
     # Example 3: Test step function
     print("\n=== Testing Step Function ===")
     tester.test_step(112)  # Place stone at position 112
+    tester.test_step(113)  # Place stone at position 113
+    tester.test_step(111)  # Place stone at position 111
+    tester.test_step(100)  # Place stone at position 112
     
     # Example 4: Test win condition
     print("\n=== Testing Win Condition ===")
     win_board = np.zeros((15, 15))
     win_board[7:12, 7] = 1  # Five black stones in a row
+    win_board[9, 7] = 0
     tester.set_board(win_board)
-    tester.test_check_win(9, 7)  # Check middle stone
+    tester.test_check_win(9, 7)  # Should return True
+    
+    # Test case 2: More than 5 in a row (should not win)
+    win_board = np.zeros((15, 15))
+    win_board[7:13, 7] = 1  # Six black stones in a row
+    tester.set_board(win_board)
+    tester.test_check_win(9, 7)  # Should return False
+    
+    # Test case 3: 5 stones with gap
+    win_board = np.zeros((15, 15))
+    win_board[7:10, 7] = 1  # Three black stones
+    win_board[11:13, 7] = 1  # Two more black stones with gap
+    tester.set_board(win_board)
+    tester.test_check_win(8, 7)  # Should return False
+    
+    # Test case 4: Diagonal win
+    win_board = np.zeros((15, 15))
+    for i in range(5):  # Five black stones diagonally
+        win_board[7+i, 7+i] = 1
+    win_board[7, 7] = 0
+    tester.set_board(win_board)
+    tester.test_check_win(7, 7)  # Should return True
+    tester.test_check_win(12, 12)  # Should return True
+    
+    # Test case 5: Anti-diagonal win
+    win_board = np.zeros((15, 15))
+    for i in range(5):  # Five black stones in anti-diagonal
+        win_board[7+i, 11-i] = 1
+    tester.set_board(win_board)
+    tester.test_check_win(9, 9)  # Should return True
+    
+    # Test case 6: Near board edge
+    win_board = np.zeros((15, 15))
+    win_board[0:5, 0] = 1  # Five black stones at edge
+    tester.set_board(win_board)
+    tester.test_check_win(2, 0)  # Should return True
     
     # Example 5: Test position evaluation
     print("\n=== Testing Position Evaluation ===")
