@@ -362,11 +362,11 @@ if __name__ == "__main__":
     torch.set_num_threads(4)
     
     # To start new training:
-    # train_ppo_agent()
+    train_ppo_agent()
     
     # To resume training:
-    train_ppo_agent(
-        resume_from="ppo_model_r82.2_e18280.pth",
-        start_episode=18281,  # Start from next episode
-        episodes=25000  # Train for more episodes
-    ) 
+    # train_ppo_agent(
+    #     resume_from="ppo_model_r82.2_e18280.pth",
+    #     start_episode=18281,  # Start from next episode
+    #     episodes=25000  # Train for more episodes
+    # ) 
