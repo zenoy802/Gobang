@@ -149,7 +149,7 @@ class GobangEnv:
                 return -1.0  # Penalize non-winning moves when win is possible
         
         # If no immediate win, evaluate normally
-        def count_stones_in_direction(r, c, dr, dc, player, max_steps=3):
+        def count_stones_in_direction(r, c, dr, dc, player, max_steps=2):
             """Count consecutive stones and empty spaces within max_steps"""
             count = 0
             empty_spots = []
@@ -180,9 +180,9 @@ class GobangEnv:
             if total_stones >= 4:
                 total_score += 3.0  # Immediate winning threat
             elif total_stones == 3:
-                total_score += 1.5  # Strong potential
+                total_score += 2.0  # Strong potential
             elif total_stones == 2:
-                total_score += 0.5  # Moderate potential
+                total_score += 1.0  # Moderate potential
             
             # Check opponent's threats
             opponent = -player
