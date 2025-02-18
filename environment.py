@@ -52,7 +52,7 @@ class GobangEnv:
 
         # TODO: check the reason avg reward decrease
         if self.board[row, col] != 0:
-            return self.get_state(), -10, True
+            return self.get_state(), -50, True
 
         self.board[row, col] = self.current_player
 
