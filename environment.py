@@ -29,7 +29,8 @@ class GobangEnv:
 
     def get_state(self):
         """Return current board state in the format expected by the neural network"""
-        return self.board.reshape(1, self.board_size, self.board_size)
+        # return self.board.reshape(1, self.board_size, self.board_size)
+        return self.board.flatten()
 
     def get_valid_moves(self):
         """Return indices of empty positions on the board"""

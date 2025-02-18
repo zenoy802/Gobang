@@ -187,4 +187,4 @@ if __name__ == "__main__":
     # visualizer.agent_vs_agent("model_episode_1000.pth", 
     #                          "model_episode_2000.pth")
     # visualizer.human_vs_agent("best_model_r87.5_e4413.pth", agent_type="dqn")
-    visualizer.human_vs_agent("ppo_model_r82.2_e18280.pth", agent_type="ppo") 
+    visualizer.human_vs_agent("ppo_model_episode_19000.pth", agent_type="ppo") 
