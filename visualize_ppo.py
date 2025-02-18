@@ -161,8 +161,8 @@ def main():
     visualizer = PPOGameVisualizer()
     
     # Example paths to model checkpoints
-    model1_path = "training_results/run_20250218_222137/model_episode_5000.pth"
-    model2_path = "training_results/run_20250218_222137/model_episode_5000.pth"
+    model1_path = "training_results/run_20250218_224455/model_episode_5000.pth"
+    model2_path = "training_results/run_20250218_224455/model_episode_5000.pth"
     
     # Uncomment one of these to run different modes:
     

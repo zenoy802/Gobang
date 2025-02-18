@@ -127,7 +127,7 @@ class GobangEnv:
         # player = self.board[row, col]
         player = self.current_player
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        total_score = 0
+        total_score = -0.5
         
         def count_stones_in_direction(r, c, dr, dc, player, max_steps=3):
             """Count consecutive stones and empty spaces within max_steps"""
@@ -160,9 +160,9 @@ class GobangEnv:
             if total_stones >= 4:
                 total_score += 3.0  # Immediate winning threat
             elif total_stones == 3:
-                total_score += 0.5  # Strong potential
+                total_score += 1.5  # Strong potential
             elif total_stones == 2:
-                total_score += 0.2  # Moderate potential
+                total_score += 0.5  # Moderate potential
             
             # Check opponent's threats
             opponent = -player
