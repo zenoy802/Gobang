@@ -123,12 +123,32 @@ class GobangEnv:
         Evaluate the potential of a position based on:
         1. Offensive potential (consecutive stones within 5 steps)
         2. Defensive necessity (blocking opponent's winning moves)
+        3. Prioritize winning moves when available
         """
         # player = self.board[row, col]
         player = self.current_player
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         total_score = -0.5
         
+        # First check if there are any winning moves available
+        winning_positions = set()
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                if self.board[r, c] == 0:  # Empty position
+                    self.board[r, c] = player
+                    if self._check_win(r, c):
+                        winning_positions.add((r, c))
+                    self.board[r, c] = 0  # Reset position
+        
+        # If winning moves exist, only give high reward to those positions
+        if winning_positions:
+            current_pos = (row, col)
+            if current_pos in winning_positions:
+                return 10.0  # High reward for winning move
+            else:
+                return -1.0  # Penalize non-winning moves when win is possible
+        
+        # If no immediate win, evaluate normally
         def count_stones_in_direction(r, c, dr, dc, player, max_steps=3):
             """Count consecutive stones and empty spaces within max_steps"""
             count = 0

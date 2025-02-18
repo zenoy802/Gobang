@@ -164,7 +164,7 @@ if __name__ == "__main__":
         num_episodes, 
         num_loops,
         save_interval=save_interval,
-        # resume_from="training_results/run_20250218_222037/model_episode_300.pth"  # Uncomment to resume
+        # resume_from="training_results/run_20250218_225307/model_episode_1100.pth"  # Uncomment to resume
     )
     
     # To resume training:
