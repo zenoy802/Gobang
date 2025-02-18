@@ -31,7 +31,7 @@ class PPOAgent:
     def take_action(self, state):
         state = torch.tensor([state], dtype=torch.float).to(self.device)
         logits = self.actor(state)
-        mask = torch.tensor(state == 0)
+        mask = torch.tensor(state == 0).detach()
         logits[~mask] = -1e8
         probs = F.softmax(logits, dim=1)
         action_dist = torch.distributions.Categorical(probs)
