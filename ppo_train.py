@@ -140,13 +140,13 @@ if __name__ == "__main__":
     actor_lr = 1e-3
     critic_lr = 1e-2
     num_episodes = 1000
-    num_loops = 10
+    num_loops = 100
     hidden_dim = 128
     gamma = 0.98
     lmbda = 0.95
     epochs = 10
     eps = 0.2
-    save_interval = 100  # Save every 100 episodes
+    save_interval = 1000  # Save every 100 episodes
     
     # Initialize environment and agent
     env = GobangEnv()

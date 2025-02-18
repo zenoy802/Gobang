@@ -20,6 +20,8 @@ class PPOAgent:
         self.critic = ValueNet(state_dim, hidden_dim).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
                                                 lr=actor_lr)
+        # 梯度裁剪
+        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
                                                  lr=critic_lr)
         self.gamma = gamma
@@ -32,7 +34,20 @@ class PPOAgent:
         state = torch.tensor([state], dtype=torch.float).to(self.device)
         logits = self.actor(state)
         mask = torch.tensor(state == 0).detach()
-        logits[~mask] = -1e8
+
+        # 检查掩码和Logits合法性
+        assert mask.any(), "无合法动作！"
+        assert torch.all(torch.isfinite(logits)), "Actor输出异常！"
+
+        # 应用掩码并数值稳定
+        masked_logits = logits.masked_fill(~mask, -1e8)
+        max_logit = masked_logits.max(dim=-1, keepdim=True).values
+        stable_logits = masked_logits - max_logit
+        probs = torch.softmax(stable_logits, dim=-1)
+        
+        # 再次检查概率合法性
+        assert not torch.isnan(probs).any(), "概率包含NaN！"
+
         probs = F.softmax(logits, dim=1)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()

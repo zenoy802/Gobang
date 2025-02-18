@@ -10,9 +10,14 @@ class PolicyNet(torch.nn.Module):
         self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
 
+        # 添加归一化层（可选但推荐）
+        self.layer_norm = torch.nn.LayerNorm(hidden_dim)
+
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        return F.softmax(self.fc2(x), dim=1)
+        x = self.layer_norm(x)  # 稳定训练
+        logits = self.fc2(x)    # 输出原始Logits，而非概率
+        return logits            # 形状为(batch_size, action_dim)
 
 
 class ValueNet(torch.nn.Module):
