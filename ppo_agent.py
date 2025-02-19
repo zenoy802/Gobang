@@ -20,8 +20,6 @@ class PPOAgent:
         self.critic = ValueNet(state_dim, hidden_dim).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
                                                 lr=actor_lr)
-        # 梯度裁剪
-        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
                                                  lr=critic_lr)
         self.gamma = gamma
@@ -30,25 +28,10 @@ class PPOAgent:
         self.eps = eps  # PPO中截断范围的参数
         self.device = device
 
-    def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
-        logits = self.actor(state)
-        mask = torch.tensor(state == 0).detach()
-
-        # 检查掩码和Logits合法性
-        assert mask.any(), "无合法动作！"
-        assert torch.all(torch.isfinite(logits)), "Actor输出异常！"
-
-        # 应用掩码并数值稳定
-        masked_logits = logits.masked_fill(~mask, -1e8)
-        max_logit = masked_logits.max(dim=-1, keepdim=True).values
-        stable_logits = masked_logits - max_logit
-        probs = torch.softmax(stable_logits, dim=-1)
-        
-        # 再次检查概率合法性
-        assert not torch.isnan(probs).any(), "概率包含NaN！"
-
-        probs = F.softmax(logits, dim=1)
+    def take_action(self, state, mask):
+        state = torch.tensor(state, dtype=torch.float).to(self.device)
+        mask = torch.tensor(mask, dtype=torch.bool).to(self.device)
+        probs = self.actor(state, mask)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
         return action.item()
@@ -56,6 +39,8 @@ class PPOAgent:
     def update(self, transition_dict):
         states = torch.tensor(transition_dict['states'],
                               dtype=torch.float).to(self.device)
+        masks = torch.tensor(transition_dict['masks'],
+                              dtype=torch.bool).to(self.device)
         actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(
             self.device)
         rewards = torch.tensor(transition_dict['rewards'],
@@ -69,11 +54,11 @@ class PPOAgent:
         td_delta = td_target - self.critic(states)
         advantage = compute_advantage(self.gamma, self.lmbda,
                                                td_delta.cpu()).to(self.device)
-        old_log_probs = torch.log(self.actor(states).gather(1,
+        old_log_probs = torch.log(self.actor(states, masks).gather(1,
                                                             actions)).detach()
 
         for _ in range(self.epochs):
-            log_probs = torch.log(self.actor(states).gather(1, actions))
+            log_probs = torch.log(self.actor(states, masks).gather(1, actions))
             ratio = torch.exp(log_probs - old_log_probs)
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1 - self.eps,
@@ -85,6 +70,9 @@ class PPOAgent:
             self.critic_optimizer.zero_grad()
             actor_loss.backward()
             critic_loss.backward()
+            # 梯度裁剪
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 

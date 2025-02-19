@@ -93,14 +93,16 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
         with tqdm(total=int(num_episodes/10), desc=f'Loop {i+1}/{num_loops}') as pbar:
             for i_episode in range(int(num_episodes/10)):
                 episode_return = 0
-                transition_dict = {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
+                transition_dict = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
                 state = env.reset()
                 done = False
                 
                 while not done:
+                    mask = state == 0
                     action = agent.take_action(state)
                     next_state, reward, done = env.step(action)
                     transition_dict['states'].append(state)
+                    transition_dict['masks'].append(mask)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(next_state)
                     transition_dict['rewards'].append(reward)

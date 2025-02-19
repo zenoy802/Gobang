@@ -13,11 +13,15 @@ class PolicyNet(torch.nn.Module):
         # 添加归一化层（可选但推荐）
         self.layer_norm = torch.nn.LayerNorm(hidden_dim)
 
-    def forward(self, x):
+    def forward(self, x, mask):
         x = F.relu(self.fc1(x))
         x = self.layer_norm(x)  # 稳定训练
         logits = self.fc2(x)    # 输出原始Logits，而非概率
-        return logits            # 形状为(batch_size, action_dim)
+        masked_logits = logits.masked_fill(~mask, -1e2)
+        max_logit = masked_logits.max(dim=-1, keepdim=True).values
+        stable_logits = masked_logits - max_logit
+        probs = torch.softmax(stable_logits, dim=-1)
+        return probs            # 形状为(batch_size, action_dim)
 
 
 class ValueNet(torch.nn.Module):
