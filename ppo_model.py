@@ -17,7 +17,7 @@ class PolicyNet(torch.nn.Module):
         x = F.relu(self.fc1(x))
         x = self.layer_norm(x)  # 稳定训练
         logits = self.fc2(x)    # 输出原始Logits，而非概率
-        masked_logits = logits.masked_fill(~mask, -1e2)
+        masked_logits = logits.masked_fill(~mask, -1e3)
         max_logit = masked_logits.max(dim=-1, keepdim=True).values
         stable_logits = masked_logits - max_logit
         probs = torch.softmax(stable_logits, dim=-1)
