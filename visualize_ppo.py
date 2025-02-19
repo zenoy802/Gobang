@@ -112,8 +112,9 @@ class PPOGameVisualizer:
                     running = False
             
             if not self.env.done:
+                mask = state == 0
                 current_agent = agent1 if self.env.current_player == 1 else agent2
-                action = current_agent.take_action(state)
+                action = current_agent.take_action(state, mask)
                 state, reward, done = self.env.step(action)
                 
                 self.draw_board()
@@ -151,8 +152,9 @@ class PPOGameVisualizer:
                         action = self.get_move_from_pos(pos)
                         if action is not None and action in self.env.get_valid_moves():
                             state, reward, done = self.env.step(action)
-            else:  # Model's turn
-                action = agent.take_action(state)
+            else:
+                mask = state == 0  # Model's turn
+                action = agent.take_action(state, mask)
                 state, reward, done = self.env.step(action)
         
         pygame.quit()
@@ -161,8 +163,8 @@ def main():
     visualizer = PPOGameVisualizer()
     
     # Example paths to model checkpoints
-    model1_path = "training_results/run_20250218_232111/model_episode_10000.pth"
-    model2_path = "training_results/run_20250218_232111/model_episode_10000.pth"
+    model1_path = "training_results/run_20250219_222613/model_episode_5000.pth"
+    model2_path = "training_results/run_20250219_222613/model_episode_5000.pth"
     
     # Uncomment one of these to run different modes:
     

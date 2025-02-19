@@ -56,9 +56,9 @@ class GobangEnv:
 
         self.board[row, col] = self.current_player
 
-        if self._check_win(row, col):
+        if self._get_max_consecutive_num(row, col) >= 5:
             self.done = True
-            return self.get_state(), 10, True  # Increased reward for winning
+            return self.get_state(), 100, True  # Increased reward for winning
 
         if len(self.get_valid_moves()) == 0:
             self.done = True
@@ -75,20 +75,21 @@ class GobangEnv:
         col = action % self.board_size
         return row, col
 
-    def _check_win(self, row, col):
+    def _get_max_consecutive_num(self, row, col):
         """
         Check if the current move results in a win.
         Args:
             row (int): Row of the last move
             col (int): Column of the last move
         Returns:
-            bool: True if the current player has won (exactly 5 consecutive stones)
+            max_count (int): Maximum consecutive stones count
         """
         # player = self.board[row, col]
         player = self.current_player
         if self.board[row, col] != player:
             return False
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        max_count = 0
         
         for dr, dc in directions:
             count = 1  # Count the current stone
@@ -114,9 +115,8 @@ class GobangEnv:
                 else:
                     break
             
-            if count >= 5:
-                return True
-        return False
+            max_count = max(max_count, count)
+        return max_count
 
     def _evaluate_position(self, row, col):
         """
@@ -130,25 +130,47 @@ class GobangEnv:
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         total_score = -0.5
         
-        # First check if there are any winning moves available
+        # First check if there are any winning moves or good moves available
         winning_positions = set()
+        consecutive_4_positions = set()
+        consecutive_3_positions = set()
+        consecutive_2_positions = set()
         for r in range(self.board_size):
             for c in range(self.board_size):
                 if self.board[r, c] == 0:  # Empty position
                     self.board[r, c] = player
-                    if self._check_win(r, c):
+                    max_count = self._get_max_consecutive_num(r, c)
+                    if max_count >= 5:
                         winning_positions.add((r, c))
+                    elif max_count == 4:
+                        consecutive_4_positions.add((r, c))
+                    elif max_count == 3:
+                        consecutive_3_positions.add((r, c))
+                    elif max_count == 2:
+                        consecutive_2_positions.add((r, c))
                     self.board[r, c] = 0  # Reset position
         
         # If winning moves exist, only give high reward to those positions
         if winning_positions:
             current_pos = (row, col)
             if current_pos in winning_positions:
-                return 10.0  # High reward for winning move
+                return 100.0  # High reward for winning move
             else:
                 return -1.0  # Penalize non-winning moves when win is possible
+        elif consecutive_4_positions:
+            current_pos = (row, col)
+            if current_pos in consecutive_4_positions:
+                total_score += 25.0
+        elif consecutive_3_positions:
+            current_pos = (row, col)
+            if current_pos in consecutive_3_positions:
+                total_score += 15.0
+        elif consecutive_2_positions:
+            current_pos = (row, col)
+            if current_pos in consecutive_2_positions:
+                total_score += 5.0
         
-        # If no immediate win, evaluate normally
+        # add rewards for putting stones in groups
         def count_stones_in_direction(r, c, dr, dc, player, max_steps=2):
             """Count consecutive stones and empty spaces within max_steps"""
             count = 0
@@ -178,11 +200,7 @@ class GobangEnv:
             
             # Offensive scoring
             if total_stones >= 4:
-                total_score += 3.0  # Immediate winning threat
-            elif total_stones == 3:
-                total_score += 2.0  # Strong potential
-            elif total_stones == 2:
-                total_score += 1.0  # Moderate potential
+                total_score += 5.0  # In a group of more than 4 stones
             
             # Check opponent's threats
             opponent = -player
