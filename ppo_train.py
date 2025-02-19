@@ -99,7 +99,7 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
                 
                 while not done:
                     mask = state == 0
-                    action = agent.take_action(state)
+                    action = agent.take_action(state, mask)
                     next_state, reward, done = env.step(action)
                     transition_dict['states'].append(state)
                     transition_dict['masks'].append(mask)
