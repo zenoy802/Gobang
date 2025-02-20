@@ -14,9 +14,9 @@ from ppo_model import PolicyNet, ValueNet
 
 class PPOAgent:
     ''' PPO算法,采用截断方式 '''
-    def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
+    def __init__(self, state_dim, hidden_dim, action_dim, num_heads, actor_lr, critic_lr,
                  lmbda, epochs, eps, gamma, device):
-        self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
+        self.actor = PolicyNet(state_dim, hidden_dim, action_dim, num_heads).to(device)
         self.critic = ValueNet(state_dim, hidden_dim).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
                                                 lr=actor_lr)
@@ -29,8 +29,8 @@ class PPOAgent:
         self.device = device
 
     def take_action(self, state, mask):
-        state = torch.tensor(state, dtype=torch.float).to(self.device)
-        mask = torch.tensor(mask, dtype=torch.bool).to(self.device)
+        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        mask = torch.tensor([mask], dtype=torch.bool).to(self.device)
         probs = self.actor(state, mask)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
@@ -70,7 +70,7 @@ class PPOAgent:
             self.critic_optimizer.zero_grad()
             actor_loss.backward()
             critic_loss.backward()
-            # 梯度裁剪
+            # 梯度裁剪，TODO：原理？
             torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
             self.actor_optimizer.step()

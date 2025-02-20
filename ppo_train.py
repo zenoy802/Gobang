@@ -140,10 +140,11 @@ if __name__ == "__main__":
     
     # Training parameters
     actor_lr = 1e-3
-    critic_lr = 1e-2
+    critic_lr = 1e-3
+    num_heads = 4
     num_episodes = 1000
     num_loops = 100
-    hidden_dim = 128
+    hidden_dim = 1024
     gamma = 0.98
     lmbda = 0.95
     epochs = 10
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     action_dim = len(env.get_state())
     
     torch.manual_seed(0)
-    agent = PPOAgent(state_dim, hidden_dim, action_dim, actor_lr, critic_lr, 
+    agent = PPOAgent(state_dim, hidden_dim, action_dim, num_heads, actor_lr, critic_lr, 
                      lmbda, epochs, eps, gamma, device)
     
     # Train agent

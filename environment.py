@@ -11,7 +11,7 @@ class GobangEnv:
     Manages game state and implements game rules.
     """
     
-    def __init__(self, board_size=15):
+    def __init__(self, board_size=16):
         """
         Initialize the game environment.
         Args:
@@ -50,7 +50,6 @@ class GobangEnv:
         row = action // self.board_size
         col = action % self.board_size
 
-        # TODO: check the reason avg reward decrease
         if self.board[row, col] != 0:
             return self.get_state(), -50, True
 
