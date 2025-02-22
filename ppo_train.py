@@ -91,6 +91,7 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
     
     for i in range(start_loop, num_loops):
         with tqdm(total=int(num_episodes/10), desc=f'Loop {i+1}/{num_loops}') as pbar:
+            max_return = 50
             for i_episode in range(int(num_episodes/10)):
                 episode_return = 0
                 transition_dict = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
@@ -115,6 +116,9 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
                 
                 current_episode = num_episodes//10 * i + i_episode + 1
                 if current_episode % save_interval == 0:
+                    save_training_results(return_list, agent, current_episode, save_dir)
+                if np.mean(return_list[-10:]) > max_return + 5:
+                    max_return = np.mean(return_list[-10:])
                     save_training_results(return_list, agent, current_episode, save_dir)
                 
                 if (i_episode+1) % 10 == 0:
@@ -167,7 +171,7 @@ if __name__ == "__main__":
         num_episodes, 
         num_loops,
         save_interval=save_interval,
-        # resume_from="training_results/run_20250218_225307/model_episode_1100.pth"  # Uncomment to resume
+        resume_from="training_results/run_20250221_233747/model_episode_3923.pth"  # Uncomment to resume
     )
     
     # To resume training:

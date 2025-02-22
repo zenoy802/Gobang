@@ -17,12 +17,12 @@ class PolicyNet(torch.nn.Module):
 
     def forward(self, x, mask):
         x = self.transformer_encoder(x)
-        assert torch.isfinite(x).any(), "encoder outputs infinite!"
+        assert torch.isfinite(x).any(), f"encoder outputs infinite! transformer_encoder:{self.transformer_encoder.named_parameters()}"
         x = self.fc(x)
         assert torch.isfinite(x).any(), "fc outputs infinite!"
         logits = self.layer_norm(x)  # 稳定训练
         assert torch.isfinite(logits).any(), "logits infinite!"
-        masked_logits = logits.masked_fill(~mask, -1e3)
+        masked_logits = logits.masked_fill(~mask, -1e8)
         max_logit = masked_logits.max(dim=-1, keepdim=True).values
         stable_logits = masked_logits - max_logit
         probs = torch.softmax(stable_logits, dim=-1)
