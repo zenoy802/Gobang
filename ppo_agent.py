@@ -54,12 +54,17 @@ class PPOAgent:
         td_delta = td_target - self.critic(states)
         advantage = compute_advantage(self.gamma, self.lmbda,
                                                td_delta.cpu()).to(self.device)
-        old_log_probs = torch.log(self.actor(states, masks).gather(1,
-                                                            actions)).detach()
+        old_probs = self.actor(states, masks)
+        # old_phi_probs = old_probs.gather(1, actions).detach()
+        old_log_probs = torch.log(old_probs.gather(1, actions)).detach()
 
         for _ in range(self.epochs):
-            log_probs = torch.log(self.actor(states, masks).gather(1, actions))
+            probs = self.actor(states, masks)
+            log_probs = torch.log(probs.gather(1, actions))
+            # phi_probs = probs.gather(1, actions)
             ratio = torch.exp(log_probs - old_log_probs)
+            # ratio = torch.div(phi_probs, old_phi_probs)
+            # assert torch.equal(ratio, ratio_log), f"New calculation of ratio is not equivalent"
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1 - self.eps,
                                 1 + self.eps) * advantage  # 截断
@@ -76,7 +81,7 @@ class PPOAgent:
             for name, param in self.actor.transformer_encoder.named_parameters():
                 assert torch.isfinite(param.data).any(), f"transformer_encoder params not finite!\n Parameter: {name}\n Weights/Biases:\n{param.data}\n"
                 if param.grad is not None:
-                    assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n Weights/Biases:\n{param.grad}\n"
+                    assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n grad:\n{param.grad}\n"
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 

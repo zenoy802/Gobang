@@ -20,7 +20,7 @@ class PolicyNet(torch.nn.Module):
         for name, param in self.transformer_encoder.named_parameters():
             assert torch.isfinite(param.data).any(), f"transformer_encoder params not finite!\n Parameter: {name}\n Weights/Biases:\n{param.data}\n"
             if param.grad is not None:
-                assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n Weights/Biases:\n{param.grad}\n"
+                assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n grad:\n{param.grad}\n"
         # assert torch.isfinite(x).any(), f"encoder outputs infinite! transformer_encoder:{self.transformer_encoder.named_parameters()}"
         x = self.fc(x)
         assert torch.isfinite(x).any(), "fc outputs infinite!"
@@ -30,7 +30,17 @@ class PolicyNet(torch.nn.Module):
         max_logit = masked_logits.max(dim=-1, keepdim=True).values
         stable_logits = masked_logits - max_logit
         probs = torch.softmax(stable_logits, dim=-1)
+
+        # 添加概率下限保护（关键修改）
+        min_prob = 1e-8  # 根据需求调整
+        probs = probs.clamp(min=min_prob)  # 确保合法动作概率不低于min_prob
+        # 重新归一化概率
+        probs = probs / probs.sum(dim=-1, keepdim=True)  # 保证概率和为1
+
         assert torch.isfinite(probs).any(), "probs infinite!"
+        # assert torch.any(probs == 0.), f"probs has zeros!\n probs:{probs}"
+        assert (probs >= 0).all(), "probs has negative values!\n probs:{probs}"
+        assert torch.allclose(probs.sum(dim=-1), torch.ones_like(probs.sum(dim=-1))), "概率和不为1!"
         return probs            # 形状为(batch_size, action_dim)
 
 
