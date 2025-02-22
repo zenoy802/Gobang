@@ -17,7 +17,11 @@ class PolicyNet(torch.nn.Module):
 
     def forward(self, x, mask):
         x = self.transformer_encoder(x)
-        assert torch.isfinite(x).any(), f"encoder outputs infinite! transformer_encoder:{self.transformer_encoder.named_parameters()}"
+        for name, param in self.transformer_encoder.named_parameters():
+            assert torch.isfinite(param.data).any(), f"transformer_encoder params not finite!\n Parameter: {name}\n Weights/Biases:\n{param.data}\n"
+            if param.grad is not None:
+                assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n Weights/Biases:\n{param.grad}\n"
+        # assert torch.isfinite(x).any(), f"encoder outputs infinite! transformer_encoder:{self.transformer_encoder.named_parameters()}"
         x = self.fc(x)
         assert torch.isfinite(x).any(), "fc outputs infinite!"
         logits = self.layer_norm(x)  # 稳定训练

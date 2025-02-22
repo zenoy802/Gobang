@@ -73,6 +73,10 @@ class PPOAgent:
             # 梯度裁剪，TODO：原理？
             torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+            for name, param in self.actor.transformer_encoder.named_parameters():
+                assert torch.isfinite(param.data).any(), f"transformer_encoder params not finite!\n Parameter: {name}\n Weights/Biases:\n{param.data}\n"
+                if param.grad is not None:
+                    assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n Weights/Biases:\n{param.grad}\n"
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 
