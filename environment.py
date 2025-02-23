@@ -51,13 +51,13 @@ class GobangEnv:
         col = action % self.board_size
 
         if self.board[row, col] != 0:
-            return self.get_state(), -50, True
+            return self.get_state(), -0.5, True
 
         self.board[row, col] = self.current_player
 
         if self._get_max_consecutive_num(row, col) >= 5:
             self.done = True
-            return self.get_state(), 100, True  # Increased reward for winning
+            return self.get_state(), 5.0, True  # Increased reward for winning
 
         if len(self.get_valid_moves()) == 0:
             self.done = True
@@ -127,7 +127,7 @@ class GobangEnv:
         # player = self.board[row, col]
         player = self.current_player
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        total_score = -0.5
+        total_score = 0.0
         
         # First check if there are any winning moves or good moves available
         winning_positions = set()
@@ -153,64 +153,64 @@ class GobangEnv:
         if winning_positions:
             current_pos = (row, col)
             if current_pos in winning_positions:
-                return 100.0  # High reward for winning move
+                return 5.0  # High reward for winning move
             else:
-                return -1.0  # Penalize non-winning moves when win is possible
-        elif consecutive_4_positions:
-            current_pos = (row, col)
-            if current_pos in consecutive_4_positions:
-                total_score += 25.0
-        elif consecutive_3_positions:
-            current_pos = (row, col)
-            if current_pos in consecutive_3_positions:
-                total_score += 15.0
-        elif consecutive_2_positions:
-            current_pos = (row, col)
-            if current_pos in consecutive_2_positions:
-                total_score += 5.0
+                return 0.0  # Penalize non-winning moves when win is possible
+        # elif consecutive_4_positions:
+        #     current_pos = (row, col)
+        #     if current_pos in consecutive_4_positions:
+        #         total_score += 25.0
+        # elif consecutive_3_positions:
+        #     current_pos = (row, col)
+        #     if current_pos in consecutive_3_positions:
+        #         total_score += 15.0
+        # elif consecutive_2_positions:
+        #     current_pos = (row, col)
+        #     if current_pos in consecutive_2_positions:
+        #         total_score += 5.0
         
-        # add rewards for putting stones in groups
-        def count_stones_in_direction(r, c, dr, dc, player, max_steps=2):
-            """Count consecutive stones and empty spaces within max_steps"""
-            count = 0
-            empty_spots = []
-            steps = 0
-            curr_r, curr_c = r, c
+        # # add rewards for putting stones in groups
+        # def count_stones_in_direction(r, c, dr, dc, player, max_steps=2):
+        #     """Count consecutive stones and empty spaces within max_steps"""
+        #     count = 0
+        #     empty_spots = []
+        #     steps = 0
+        #     curr_r, curr_c = r, c
             
-            while steps < max_steps and 0 <= curr_r < self.board_size and 0 <= curr_c < self.board_size:
-                if self.board[curr_r, curr_c] == player:
-                    count += 1
-                elif self.board[curr_r, curr_c] == 0:
-                    empty_spots.append((curr_r, curr_c))
-                else:  # Opponent stone
-                    break
-                steps += 1
-                curr_r += dr
-                curr_c += dc
+        #     while steps < max_steps and 0 <= curr_r < self.board_size and 0 <= curr_c < self.board_size:
+        #         if self.board[curr_r, curr_c] == player:
+        #             count += 1
+        #         elif self.board[curr_r, curr_c] == 0:
+        #             empty_spots.append((curr_r, curr_c))
+        #         else:  # Opponent stone
+        #             break
+        #         steps += 1
+        #         curr_r += dr
+        #         curr_c += dc
             
-            return count, empty_spots
+        #     return count, empty_spots
         
-        # Check each direction for both offensive and defensive potential
-        for dr, dc in directions:
-            # Check forward and backward for offensive potential
-            forward_count, forward_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, player)
-            backward_count, backward_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, player)
-            total_stones = forward_count + backward_count + 1  # +1 for current stone
+        # # Check each direction for both offensive and defensive potential
+        # for dr, dc in directions:
+        #     # Check forward and backward for offensive potential
+        #     forward_count, forward_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, player)
+        #     backward_count, backward_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, player)
+        #     total_stones = forward_count + backward_count + 1  # +1 for current stone
             
-            # Offensive scoring
-            if total_stones >= 4:
-                total_score += 5.0  # In a group of more than 4 stones
+        #     # Offensive scoring
+        #     if total_stones >= 4:
+        #         total_score += 5.0  # In a group of more than 4 stones
             
-            # Check opponent's threats
-            opponent = -player
-            fwd_opponent_count, fwd_opponent_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, opponent)
-            bwd_opponent_count, bwd_opponent_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, opponent)
-            opponent_stones = fwd_opponent_count + bwd_opponent_count
+        #     # Check opponent's threats
+        #     opponent = -player
+        #     fwd_opponent_count, fwd_opponent_empty = count_stones_in_direction(row+dr, col+dc, dr, dc, opponent)
+        #     bwd_opponent_count, bwd_opponent_empty = count_stones_in_direction(row-dr, col-dc, -dr, -dc, opponent)
+        #     opponent_stones = fwd_opponent_count + bwd_opponent_count
             
-            # Defensive scoring
-            if opponent_stones >= 3:
-                total_score += 1.5  # Critical defensive move
-            elif opponent_stones == 2 and (len(fwd_opponent_empty) + len(bwd_opponent_empty)) >= 2:
-                total_score += 0.8  # Potential defensive necessity
+        #     # Defensive scoring
+        #     if opponent_stones >= 3:
+        #         total_score += 1.5  # Critical defensive move
+        #     elif opponent_stones == 2 and (len(fwd_opponent_empty) + len(bwd_opponent_empty)) >= 2:
+        #         total_score += 0.8  # Potential defensive necessity
         
         return total_score 

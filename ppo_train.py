@@ -145,14 +145,14 @@ if __name__ == "__main__":
     # Training parameters
     actor_lr = 1e-3
     critic_lr = 1e-3
-    num_heads = 4
+    num_heads = 8
     num_episodes = 1000
-    num_loops = 100
+    num_loops = 300
     hidden_dim = 1024
     gamma = 0.98
     lmbda = 0.95
-    epochs = 10
-    eps = 0.2
+    epochs = 20
+    eps = 0.1
     save_interval = 1000  # Save every 100 episodes
     
     # Initialize environment and agent
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         num_episodes, 
         num_loops,
         save_interval=save_interval,
-        resume_from="training_results/run_20250222_100748/model_episode_3000.pth"  # Uncomment to resume
+        resume_from="training_results/run_20250222_224145/model_episode_6401.pth"  # Uncomment to resume
     )
     
     # To resume training:
