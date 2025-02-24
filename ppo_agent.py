@@ -36,7 +36,7 @@ class PPOAgent:
         action = action_dist.sample()
         return action.item()
 
-    def update(self, transition_dict):
+    def update(self, transition_dict, lr):
         states = torch.tensor(transition_dict['states'],
                               dtype=torch.float).to(self.device)
         masks = torch.tensor(transition_dict['masks'],
@@ -76,12 +76,16 @@ class PPOAgent:
             actor_loss.backward()
             critic_loss.backward()
             # 梯度裁剪，TODO：原理？
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+            # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+            # torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
             for name, param in self.actor.transformer_encoder.named_parameters():
                 assert torch.isfinite(param.data).any(), f"transformer_encoder params not finite!\n Parameter: {name}\n Weights/Biases:\n{param.data}\n"
                 if param.grad is not None:
                     assert torch.isfinite(param.grad).any(), f"transformer_encoder grad not finite!\n Parameter: {name}\n grad:\n{param.grad}\n"
+            for param_group in self.actor_optimizer.param_groups:
+                param_group['lr'] = lr
+            for param_group in self.critic_optimizer.param_groups:
+                param_group['lr'] = lr
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 

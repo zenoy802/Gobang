@@ -14,6 +14,7 @@ from collections import deque
 import os
 import json
 from datetime import datetime
+import math
 
 def save_training_results(return_list, agent, episode, save_dir="training_results"):
     """Save training results, metrics, and model checkpoints"""
@@ -65,7 +66,23 @@ def load_training_checkpoint(agent, checkpoint_path):
     agent.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
     return checkpoint['return_list'], checkpoint['episode']
 
-def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100, 
+def get_lr(current_episode, num_episodes, num_loops):
+    """Get learning rate for current episode"""
+    max_lr = 1e-3
+    min_lr = max_lr * 0.1
+    warmup_episodes = 0
+    max_episodes = num_episodes * num_loops
+    if current_episode < warmup_episodes:
+        return max_lr * current_episode / warmup_episodes
+    if current_episode > max_episodes:
+        return min_lr
+    decay_ratio = (current_episode - warmup_episodes) / (max_episodes - warmup_episodes)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1 + math.cos(decay_ratio * math.pi))
+    return min_lr + coeff * (max_lr - min_lr)
+    
+
+def train_on_policy_agent(env, agent, num_episodes, num_loops, epochs, save_interval=100, 
                          resume_from=None, save_dir="training_results"):
     """
     Train PPO agent with periodic saving of results
@@ -74,6 +91,7 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
         agent: PPO agent
         num_episodes: Number of episodes per loop
         num_loops: Number of training loops
+        epochs: each sequence's training number
         save_interval: Episodes between saves
         resume_from: Path to checkpoint to resume from
         save_dir: Directory to save results
@@ -86,13 +104,12 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
         print(f"Resuming training from {resume_from}")
         loaded_returns, loaded_episode = load_training_checkpoint(agent, resume_from)
         return_list.extend(loaded_returns)
-        start_loop = loaded_episode // (num_episodes // 10)
+        start_loop = loaded_episode // num_episodes
         print(f"Resumed from episode {loaded_episode}")
     
     for i in range(start_loop, num_loops):
-        with tqdm(total=int(num_episodes/10), desc=f'Loop {i+1}/{num_loops}') as pbar:
-            max_return = 50
-            for i_episode in range(int(num_episodes/10)):
+        with tqdm(total=int(num_episodes/epochs), desc=f'Loop {i+1}/{num_loops}') as pbar:
+            for ith_update in range(int(num_episodes/epochs)):
                 episode_return = 0
                 transition_dict = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
                 state = env.reset()
@@ -101,6 +118,7 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
                 while not done:
                     mask = state == 0
                     action = agent.take_action(state, mask)
+                    env.current_player = 1
                     next_state, reward, done = env.step(action)
                     transition_dict['states'].append(state)
                     transition_dict['masks'].append(mask)
@@ -112,25 +130,113 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, save_interval=100
                     episode_return += reward
                 
                 return_list.append(episode_return)
-                agent.update(transition_dict)
+                current_episode = num_episodes * i + ith_update + 1
+                lr = get_lr(current_episode, num_episodes, num_loops)
+                agent.update(transition_dict, lr)
                 
-                current_episode = num_episodes//10 * i + i_episode + 1
                 if current_episode % save_interval == 0:
                     save_training_results(return_list, agent, current_episode, save_dir)
-                if np.mean(return_list[-10:]) > max_return + 5:
-                    max_return = np.mean(return_list[-10:])
-                    save_training_results(return_list, agent, current_episode, save_dir)
                 
-                if (i_episode+1) % 10 == 0:
+                if (ith_update+1) % 10 == 0:
                     pbar.set_postfix({
                         'episode': f'{current_episode}',
-                        'return': f'{np.mean(return_list[-10:]):.3f}'
+                        'return': f'{np.mean(return_list[-10:]):.3f}',
+                        'action_length': f'{len(transition_dict["actions"])}',
+                        'lr': f'{lr:.3f}'
                     })
                 pbar.update(1)
     
     # Save final results
     save_training_results(return_list, agent, num_episodes * num_loops, save_dir)
     return return_list
+
+def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs, save_interval=100, 
+                         resume_from=None, save_dir="training_results"):
+    """
+    Train PPO agent with periodic saving of results
+    Args:
+        env: Game environment
+        agent: PPO agent
+        num_episodes: Number of episodes per loop
+        num_loops: Number of training loops
+        epochs: each sequence's training number
+        save_interval: Episodes between saves
+        resume_from: Path to checkpoint to resume from
+        save_dir: Directory to save results
+    """
+    black_return_list = []
+    white_return_list = []
+    start_loop = 0
+    
+    # Resume from checkpoint if specified
+    if resume_from:
+        print(f"Resuming training from {resume_from}")
+        loaded_returns, loaded_episode = load_training_checkpoint(agent, resume_from)
+        return_list.extend(loaded_returns)
+        start_loop = loaded_episode // num_episodes
+        print(f"Resumed from episode {loaded_episode}")
+    
+    for i in range(start_loop, num_loops):
+        with tqdm(total=int(num_episodes/epochs), desc=f'Loop {i+1}/{num_loops}') as pbar:
+            for ith_update in range(int(num_episodes/epochs)):
+                episode_black_return = 0
+                episode_white_return = 0
+                invalid_white_move_flag = False
+                transition_dict = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
+                state = env.reset()
+                done = False
+                
+                while not done:
+                    black_mask = state == 0
+                    black_action = agent.take_action(state, black_mask)
+                    env.current_player = 1
+                    next_state, black_reward, done = env.step(black_action)
+                    if not done:
+                        white_mask = next_state == 0
+                        white_state = -next_state
+                        white_action = agent.take_action(white_state, white_mask)
+                        env.current_player = -1
+                        next_state, white_reward, done = env.step(white_action)
+                        if done and white_reward > 0:
+                            black_reward = -white_reward
+                        elif done and white_reward < 0:
+                            invalid_white_move_flag = True  
+                            break
+                    transition_dict['states'].append(state)
+                    transition_dict['masks'].append(black_mask)
+                    transition_dict['actions'].append(black_action)
+                    transition_dict['next_states'].append(next_state)
+                    transition_dict['rewards'].append(black_reward)
+                    transition_dict['dones'].append(done)
+                    state = next_state
+                    episode_black_return += black_reward
+                    episode_white_return += white_reward
+                if invalid_white_move_flag:
+                    print("Invalid white move occurs, skip this episode")
+                    continue
+                
+                black_return_list.append(episode_black_return)
+                white_return_list.append(episode_white_return)
+                current_episode = num_episodes * i + ith_update + 1
+                lr = get_lr(current_episode, num_episodes, num_loops)
+                agent.update(transition_dict, lr)
+                
+                if current_episode % save_interval == 0:
+                    save_training_results(return_list, agent, current_episode, save_dir)
+                
+                if (ith_update+1) % 10 == 0:
+                    pbar.set_postfix({
+                        'episode': f'{current_episode}',
+                        'black_return': f'{np.mean(black_return_list[-10:]):.3f}',
+                        'white_return': f'{np.mean(white_return_list[-10:]):.3f}',
+                        'action_length': f'{len(transition_dict["actions"])}',
+                        'lr': f'{lr:.3f}'
+                    })
+                pbar.update(1)
+    
+    # Save final results
+    save_training_results(black_return_list, agent, num_episodes * num_loops, save_dir)
+    return black_return_list
 
 if __name__ == "__main__":
     # Setup device
@@ -146,12 +252,13 @@ if __name__ == "__main__":
     actor_lr = 1e-3
     critic_lr = 1e-3
     num_heads = 8
+    # num_episodes per loop
     num_episodes = 1000
-    num_loops = 300
+    num_loops = 1
     hidden_dim = 1024
     gamma = 0.98
     lmbda = 0.95
-    epochs = 20
+    epochs = 10
     eps = 0.1
     save_interval = 1000  # Save every 100 episodes
     
@@ -165,14 +272,15 @@ if __name__ == "__main__":
                      lmbda, epochs, eps, gamma, device)
     
     # Train agent
-    return_list = train_on_policy_agent(
-        env, 
-        agent, 
-        num_episodes, 
-        num_loops,
-        save_interval=save_interval,
-        resume_from="training_results/run_20250222_224145/model_episode_6401.pth"  # Uncomment to resume
-    )
+    # return_list = train_on_policy_agent(
+    #     env, 
+    #     agent, 
+    #     num_episodes, 
+    #     num_loops,
+    #     epochs,
+    #     save_interval=save_interval,
+    #     resume_from="training_results/run_20250222_224145/model_episode_6401.pth"  # Uncomment to resume
+    # )
     
     # To resume training:
     # train_ppo_agent(
@@ -180,3 +288,13 @@ if __name__ == "__main__":
     #     start_episode=18281,  # Start from next episode
     #     episodes=25000  # Train for more episodes
     # ) 
+
+    return_list = train_on_policy_self_play_agent(
+        env, 
+        agent, 
+        num_episodes, 
+        num_loops,
+        epochs,
+        save_interval=save_interval,
+        # resume_from="training_results/run_20250222_224145/model_episode_6401.pth"  # Uncomment to resume
+    )
