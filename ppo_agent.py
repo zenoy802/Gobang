@@ -18,10 +18,10 @@ class PPOAgent:
                  lmbda, epochs, eps, gamma, device):
         self.actor = PolicyNet(state_dim, hidden_dim, action_dim, num_heads).to(device)
         self.critic = ValueNet(state_dim, hidden_dim).to(device)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-                                                lr=actor_lr)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
-                                                 lr=critic_lr)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(),
+                                                lr=actor_lr, weight_decay=0.1)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(),
+                                                 lr=critic_lr, weight_decay=0.1)
         self.gamma = gamma
         self.lmbda = lmbda
         self.epochs = epochs  # 一条序列的数据用来训练轮数
