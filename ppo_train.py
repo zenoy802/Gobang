@@ -231,7 +231,7 @@ def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs,
                 agent.update(transition_dict_white, lr)
                 
                 if current_episode % save_interval == 0:
-                    save_training_results(return_list, agent, current_episode, save_dir)
+                    save_training_results(black_return_list, agent, current_episode, save_dir)
                 
                 if (ith_update+1) % 10 == 0:
                     pbar.set_postfix({
