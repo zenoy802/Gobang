@@ -130,7 +130,7 @@ def train_on_policy_agent(env, agent, num_episodes, num_loops, epochs, save_inte
                     episode_return += reward
                 
                 return_list.append(episode_return)
-                current_episode = num_episodes * i + ith_update + 1
+                current_episode = num_episodes * i + (ith_update + 1) * epochs
                 lr = get_lr(current_episode, num_episodes, num_loops)
                 agent.update(transition_dict, lr)
                 
@@ -182,7 +182,8 @@ def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs,
                 episode_black_return = 0
                 episode_white_return = 0
                 invalid_white_move_flag = False
-                transition_dict = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
+                transition_dict_black = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
+                transition_dict_white = {'states': [], 'masks': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
                 state = env.reset()
                 done = False
                 
@@ -202,12 +203,19 @@ def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs,
                         elif done and white_reward < 0:
                             invalid_white_move_flag = True  
                             break
-                    transition_dict['states'].append(state)
-                    transition_dict['masks'].append(black_mask)
-                    transition_dict['actions'].append(black_action)
-                    transition_dict['next_states'].append(next_state)
-                    transition_dict['rewards'].append(black_reward)
-                    transition_dict['dones'].append(done)
+                        transition_dict_white['states'].append(white_state)
+                        transition_dict_white['masks'].append(white_mask)
+                        transition_dict_white['actions'].append(white_action)
+                        transition_dict_white['next_states'].append(-next_state)
+                        transition_dict_white['rewards'].append(white_reward)
+                        transition_dict_white['dones'].append(done)
+                    
+                    transition_dict_black['states'].append(state)
+                    transition_dict_black['masks'].append(black_mask)
+                    transition_dict_black['actions'].append(black_action)
+                    transition_dict_black['next_states'].append(next_state)
+                    transition_dict_black['rewards'].append(black_reward)
+                    transition_dict_black['dones'].append(done)
                     state = next_state
                     episode_black_return += black_reward
                     episode_white_return += white_reward
@@ -217,9 +225,10 @@ def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs,
                 
                 black_return_list.append(episode_black_return)
                 white_return_list.append(episode_white_return)
-                current_episode = num_episodes * i + ith_update + 1
+                current_episode = num_episodes * i + (ith_update + 1) * epochs
                 lr = get_lr(current_episode, num_episodes, num_loops)
-                agent.update(transition_dict, lr)
+                agent.update(transition_dict_black, lr)
+                agent.update(transition_dict_white, lr)
                 
                 if current_episode % save_interval == 0:
                     save_training_results(return_list, agent, current_episode, save_dir)
@@ -229,7 +238,7 @@ def train_on_policy_self_play_agent(env, agent, num_episodes, num_loops, epochs,
                         'episode': f'{current_episode}',
                         'black_return': f'{np.mean(black_return_list[-10:]):.3f}',
                         'white_return': f'{np.mean(white_return_list[-10:]):.3f}',
-                        'action_length': f'{len(transition_dict["actions"])}',
+                        'action_length': f'{len(transition_dict_black["actions"])}',
                         'lr': f'{lr:.3f}'
                     })
                 pbar.update(1)
@@ -254,7 +263,7 @@ if __name__ == "__main__":
     num_heads = 8
     # num_episodes per loop
     num_episodes = 1000
-    num_loops = 1
+    num_loops = 50
     hidden_dim = 1024
     gamma = 0.98
     lmbda = 0.95
