@@ -113,7 +113,11 @@ class PPOGameVisualizer:
             
             if not self.env.done:
                 mask = state == 0
-                current_agent = agent1 if self.env.current_player == 1 else agent2
+                if self.env.current_player == 1:
+                    current_agent = agent1
+                else:
+                    current_agent = agent2
+                    state = -state
                 action = current_agent.take_action(state, mask)
                 state, reward, done = self.env.step(action)
                 
