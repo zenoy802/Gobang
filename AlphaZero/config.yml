@@ -19,6 +19,13 @@ network:
     max: 1.0e-2
   grad_clip: 1.0
 
+# encoder parameters
+encoder:
+  num_blocks: 4
+  num_heads: 8
+  hidden_dim: 1024
+  dropout: 0.1
+
 # MCTS parameters
 mcts:
   num_sims: 800  # numMCTSSims
@@ -26,7 +33,7 @@ mcts:
 
 # Game parameters
 game:
-  board_size: 9
+  board_size: 8
 
 # System parameters
 system:
