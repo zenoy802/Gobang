@@ -23,7 +23,7 @@ network:
 encoder:
   num_blocks: 4
   num_heads: 8
-  hidden_dim: 1024
+  hidden_dim: 512
   dropout: 0.1
 
 # MCTS parameters
