@@ -411,3 +411,6 @@ __pycache__/
 
 # zip files
 *.zip
+
+# wandb
+wandb/
