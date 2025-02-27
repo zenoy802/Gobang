@@ -80,7 +80,7 @@ class PPOAgent:
             self.critic_optimizer.zero_grad()
             actor_loss.backward()
             critic_loss.backward()
-            # 梯度裁剪，TODO：原理？
+            # 梯度裁剪
             # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
             # torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
             for name, param in self.actor.transformer_encoder.named_parameters():
