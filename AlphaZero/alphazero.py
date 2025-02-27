@@ -431,6 +431,7 @@ class SelfPlay:
 
             if r is not None:
                 # r * (1 if self.curPlayer == x[1] else -1) means 1 for winner, -1 for loser, 0 for draw.
+                # 一旦胜利则每步奖励都为1，失败则每步奖励都为-1
                 return [
                     (x[0], x[2], r * (1 if self.curPlayer == x[1] else -1))
                     for x in trainExamples
@@ -594,7 +595,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file")
+    parser.add_argument("--config", type=str, default="config.yml", help="Path to config file")
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--board_size", type=int, default=9)
     # play arguments

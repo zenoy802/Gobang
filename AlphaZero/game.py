@@ -131,6 +131,7 @@ class GomokuGame:
 
     def getSymmetries(self, board, pi):
         # Gomoku's symmetries include rotation and reflection
+        # 高贵的AlphaZero同时将棋盘和策略进行对称变换，达到高效利用训练数据的目的？
         assert len(pi) == self.n**2
         pi_board = np.reshape(pi, (self.n, self.n))
         symmetries = []
