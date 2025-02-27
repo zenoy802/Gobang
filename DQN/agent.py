@@ -2,6 +2,11 @@
 DQN Agent implementation for the Gobang game.
 Implements Deep Q-Learning with experience replay and target network.
 """
+import sys
+import os
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 import torch
 import torch.nn as nn
@@ -10,7 +15,7 @@ import numpy as np
 from collections import deque
 import random
 import os
-from model import GobangNet
+from DQN.model import GobangNet
 
 class DQNAgent:
     """

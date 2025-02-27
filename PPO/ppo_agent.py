@@ -2,6 +2,11 @@
 PPO Agent implementation for the Gobang game.
 Implements Proximal Policy Optimization with clipped objective.
 """
+import sys
+import os
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 import torch
 import torch.nn as nn
@@ -10,7 +15,7 @@ import torch.nn.functional as F
 import numpy as np
 from collections import deque
 import os
-from ppo_model import PolicyNet, ValueNet
+from PPO.ppo_model import PolicyNet, ValueNet
 
 class PPOAgent:
     ''' PPO算法,采用截断方式 '''

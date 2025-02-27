@@ -4,7 +4,7 @@ Allows testing different board configurations and environment functions.
 """
 
 import numpy as np
-from environment import GobangEnv
+from env.environment import GobangEnv
 
 class GobangEnvTester:
     def __init__(self, board_size=15):

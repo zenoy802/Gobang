@@ -2,9 +2,14 @@
 Training script for the Gobang AI agent.
 Implements the main training loop and optimization settings.
 """
+import sys
+import os
 
-from agent import DQNAgent
-from environment import GobangEnv
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
+from DQN.agent import DQNAgent
+from env.environment import GobangEnv
 import numpy as np
 import torch
 from tqdm import tqdm

@@ -2,16 +2,20 @@
 Training script for the Gobang AI agent using PPO algorithm.
 Runs in parallel with DQN for comparison.
 """
+import sys
+import os
 
-from ppo_agent import PPOAgent
-from environment import GobangEnv
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
+from PPO.ppo_agent import PPOAgent
+from env.environment import GobangEnv
 import numpy as np
 import torch
 from tqdm import tqdm
 import time
 import matplotlib.pyplot as plt
 from collections import deque
-import os
 import json
 from datetime import datetime
 import math
