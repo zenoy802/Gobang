@@ -169,13 +169,11 @@ class AverageMeter(object):
 class NNetWrapper:
     def __init__(self, game, args):
         # self.nnet = GomokuNNet(game, args)
-        self.nnet = MyEncoderNet(game, args)
+        self.nnet = MyEncoderNet(game, args).to(args.device)
         self.board_x, self.board_y = game.getBoardSize()
         self.action_size = game.getActionSize()
         self.args = args
-
-        if args.cuda:
-            self.nnet.cuda()
+        self.device = args.device
         
         # Initialize optimizer
         self.optimizer = optim.Adam(self.nnet.parameters(), lr=args.max_lr)
@@ -225,13 +223,11 @@ class NNetWrapper:
 
                 sample_ids = np.random.randint(len(examples), size=self.args.batch_size)
                 boards, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = torch.FloatTensor(np.array(boards).astype(np.float32))
+                boards = torch.FloatTensor(np.array(boards).astype(np.float32)).to(self.device)
                 # TODO: why it is target?
-                target_pis = torch.FloatTensor(np.array(pis))
-                target_vs = torch.FloatTensor(np.array(vs).astype(np.float32))
+                target_pis = torch.FloatTensor(np.array(pis)).to(self.device)
+                target_vs = torch.FloatTensor(np.array(vs).astype(np.float32)).to(self.device)
 
-                if self.args.cuda:
-                    boards, target_pis, target_vs = boards.cuda(), target_pis.cuda(), target_vs.cuda()
 
                 # compute output
                 out_pi, out_v = self.nnet(boards)
@@ -271,9 +267,7 @@ class NNetWrapper:
         # start = time.time()
 
         # preparing input
-        board = torch.FloatTensor(board.astype(np.float32))
-        if self.args.cuda:
-            board = board.cuda()
+        board = torch.FloatTensor(board.astype(np.float32)).to(self.device)
         board = board.view(1, self.board_x, self.board_y)
         self.nnet.eval()
         with torch.no_grad():
@@ -312,6 +306,8 @@ class NNetWrapper:
         if not os.path.exists(filepath):
             raise ValueError("No model in path {}".format(filepath))
         map_location = None if self.args.cuda else "cpu"
+        if self.args.mps:
+            map_location = "mps"
         checkpoint = torch.load(filepath, map_location=map_location, weights_only=True)
         self.nnet.load_state_dict(checkpoint["state_dict"])
 
@@ -488,7 +484,14 @@ def load_config(config_path):
     args.board_size = config['game']['board_size']
     
     # System params
-    args.cuda = config['system']['cuda'] and torch.cuda.is_available()
+    args.cuda = torch.cuda.is_available()
+    args.mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    if args.cuda:
+        args.device = torch.device("cuda")
+    elif args.mps:
+        args.device = torch.device("mps")
+    else:
+        args.device = torch.device("cpu")
     args.checkpoint = config['system']['checkpoint_dir']
     args.load_model = config['system']['load_model']
     args.load_folder_file = tuple(config['system']['load_folder_file'])
@@ -525,6 +528,8 @@ def print_config(args):
     
     print("\nSystem Parameters:")
     print(f"  CUDA Enabled: {args.cuda}")
+    print(f"  MPS Enabled: {args.mps}")
+    print(f"  Using Device: {args.device}")
     print(f"  Checkpoint Directory: {args.checkpoint}")
     print(f"  Load Model: {args.load_model}")
     print(f"  Load Path: {args.load_folder_file}")
