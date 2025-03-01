@@ -458,6 +458,14 @@ class SelfPlay:
                     (x[0], x[2], r * (1 if self.curPlayer == x[1] else -1))
                     for x in trainExamples
                 ]
+    
+    def generate_train_examples_sync(self):
+        # examples of the iteration
+        iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
+        for _ in tqdm(range(self.args.numEps), desc="Self Play"):
+            self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+            iterationTrainExamples += self.executeEpisode()
+        return iterationTrainExamples
 
     def learn(self):
         """
@@ -471,12 +479,7 @@ class SelfPlay:
         for i in range(1, self.args.numIters + 1):
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
-            # examples of the iteration
-            iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
-
-            for _ in tqdm(range(self.args.numEps), desc="Self Play"):
-                self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
-                iterationTrainExamples += self.executeEpisode()
+            iterationTrainExamples = self.generate_train_examples_sync()
 
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
