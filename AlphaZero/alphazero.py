@@ -48,9 +48,12 @@ class MCTS:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
+        startTime = timeit.default_timer()
         for _ in range(self.args.numMCTSSims):
             self.recursion_search(canonicalBoard)
             # self.loop_search(canonicalBoard)
+        endTime = timeit.default_timer()
+        print(f"search time {endTime - startTime}")
 
         s = self.game.stringRepresentation(canonicalBoard)
         counts = [
@@ -201,6 +204,18 @@ class MCTS:
                 if u > cur_best:
                     cur_best = u
                     best_act = a
+        
+        # SIMD (vectorized) implementation of PUTC values
+        # action_size = self.game.getActionSize()
+        # Q_values = np.zeros(action_size, dtype=np.float32)
+        # N_visits = np.zeros(action_size, dtype=np.float32)
+        # for a in range(action_size):
+        #     Q_values[a] = float(self.Qsa.get((s, a), 0))
+        #     N_visits[a] = float(self.Nsa.get((s, a), 0))
+        # U = Q_values + self.args.cpuct * self.Ps[s] * np.sqrt(self.Ns[s]) / (1 + N_visits)
+        # # masking invalid moves
+        # U = np.where(valids, U, -np.inf)
+        # best_act = np.argmax(U)
 
         a = best_act
         next_s, next_player = self.game.getNextState(canonicalBoard, 1, a)
