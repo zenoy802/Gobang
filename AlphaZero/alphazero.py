@@ -55,7 +55,7 @@ class MCTS:
             self.recursion_search(canonicalBoard)
             # self.loop_search(canonicalBoard)
         endTime = timeit.default_timer()
-        print(f"search time {endTime - startTime}")
+        # print(f"search time {endTime - startTime}")
 
         s = self.game.stringRepresentation(canonicalBoard)
         counts = [
@@ -314,8 +314,24 @@ class TrainExamplesGenerator:
     def generate_train_examples_sync(self, num_episodes, worker_id):
         # examples of the iteration
         iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
-        for _ in tqdm(range(num_episodes), desc=f"Self Play on worker {worker_id}"):
-            iterationTrainExamples += self.executeEpisode()
+        
+        # Create a position-aware tqdm progress bar
+        # The position parameter stacks bars vertically on the terminal
+        progress_bar = tqdm(
+            range(num_episodes), 
+            desc=f"Worker {worker_id}", 
+            position=worker_id,  # Position bars vertically based on worker ID
+            leave=True           # Keep the bar after completion
+        )
+        
+        for _ in progress_bar:
+            episode_examples = self.executeEpisode()
+            iterationTrainExamples += episode_examples
+            # Optionally update the progress bar description with episode stats
+            progress_bar.set_postfix(examples=len(episode_examples))
+        
+        # Clear position for this bar when done
+        progress_bar.close()
         return iterationTrainExamples
 
 
@@ -348,14 +364,20 @@ class SelfPlay:
         # Create argument pairs for each worker
         worker_args = list(zip(episodes_per_worker, range(num_workers)))
 
+        # Set up a progress bar for overall progress
+        print(f"Starting {num_workers} worker processes for self-play:")
+        
         # Create process pool
         with mp.Pool(processes=num_workers) as pool:
             # Map worker function to processes using starmap
-            results = list(tqdm(
-                pool.starmap(generator.generate_train_examples_sync, worker_args),
-                total=num_workers,
-                desc="Self Play (parallel)"
-            ))
+            # No tqdm wrapper here, each worker will have its own progress bar
+            results = pool.starmap(generator.generate_train_examples_sync, worker_args)
+        
+        # Move cursor down to account for all the progress bars
+        for _ in range(num_workers + 1):
+            print("\n\n")
+        
+        print(f"Generate train examples completed with {num_workers} workers")
 
         # Combine results from all workers
         all_examples = deque([], maxlen=self.args.maxlenOfQueue)
@@ -378,7 +400,7 @@ class SelfPlay:
             log.info(f"Starting Iter #{i} ...")
             self.mcts = MCTS(self.game, self.nnetWrapper, self.args)  # reset search tree
             # iterationTrainExamples = self.generate_train_examples()
-            iterationTrainExamples = self.generate_train_examples_parallel(2)
+            iterationTrainExamples = self.generate_train_examples_parallel(self.args.numWorkers)
 
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
@@ -469,6 +491,7 @@ def load_config(config_path):
     args.arenaCompare = config['training']['arena_compare']
     args.tempThreshold = config['training']['temp_threshold']
     args.isFirstIter = config['training']['is_first_iter']
+    args.numWorkers = config['training']['num_workers']
     
     # Network params
     args.num_channels = config['network']['num_channels']

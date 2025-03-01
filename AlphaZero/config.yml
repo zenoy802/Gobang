@@ -10,6 +10,7 @@ training:
   arena_compare: 40
   temp_threshold: 15
   is_first_iter: True
+  num_workers: 4
 
 # Neural Network parameters
 network:
