@@ -250,19 +250,21 @@ class TrainExamplesGenerator:
     def __getstate__(self):
         """Return state values to be pickled"""
         state = self.__dict__.copy()
-        del state['nnet']
+        del state['nnetWrapper']
         del state['mcts']
         return state
     
-    def __setstate__(self, state, model_filename=None):
+    def __setstate__(self, state):
         """Restore state from the unpickled state values"""
         self.__dict__.update(state)
-        if not model_filename:
-            self.nnetWrapper = NNetWrapper(self.game, self.args)
+        # Recreate the objects that couldn't be pickled
+        self.nnetWrapper = NNetWrapper(self.game, self.args)
+        if self.args.isFirstIter:
             self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
         else:
-            self.nnetWrapper = NNetWrapper(self.game, self.args)
-            self.nnetWrapper.load_checkpoint(folder=self.args.checkpoint, filename=model_filename)
+            self.nnetWrapper.load_checkpoint(
+                    folder=self.args.checkpoint, filename=self.args.load_trained_model_filename
+                )
             self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
 
     def executeEpisode(self):
@@ -335,6 +337,33 @@ class SelfPlay:
         iterationTrainExamples = generator.generate_train_examples_sync(self.args.numEps, 0)
         return iterationTrainExamples
     
+    def generate_train_examples_parallel(self, num_workers):
+        """Generates training examples using multiple processes"""
+        generator = TrainExamplesGenerator(self.game, self.nnetWrapper, self.args)
+        # Calculate episodes per worker
+        episodes_per_worker = [self.args.numEps // num_workers] * num_workers
+        # Add remaining episodes to last worker
+        episodes_per_worker[-1] += self.args.numEps % num_workers
+
+        # Create argument pairs for each worker
+        worker_args = list(zip(episodes_per_worker, range(num_workers)))
+
+        # Create process pool
+        with mp.Pool(processes=num_workers) as pool:
+            # Map worker function to processes using starmap
+            results = list(tqdm(
+                pool.starmap(generator.generate_train_examples_sync, worker_args),
+                total=num_workers,
+                desc="Self Play (parallel)"
+            ))
+
+        # Combine results from all workers
+        all_examples = deque([], maxlen=self.args.maxlenOfQueue)
+        for r in results:
+            all_examples.extend(r)
+            
+        return all_examples
+    
     def learn(self):
         """
         Performs numIters iterations with numEps episodes of self-play in each
@@ -348,7 +377,8 @@ class SelfPlay:
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
             self.mcts = MCTS(self.game, self.nnetWrapper, self.args)  # reset search tree
-            iterationTrainExamples = self.generate_train_examples()
+            # iterationTrainExamples = self.generate_train_examples()
+            iterationTrainExamples = self.generate_train_examples_parallel(2)
 
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
@@ -397,16 +427,28 @@ class SelfPlay:
                 self.nnetWrapper.load_checkpoint(
                     folder=self.args.checkpoint, filename="temp.pth.tar"
                 )
+                # for parallel processing setting
+                self.args.isFirstIter = False
+                self.args.load_trained_model_filename = "temp.pth.tar"
             else:
                 log.info("ACCEPTING NEW MODEL")
                 self.nnetWrapper.save_checkpoint(
                     folder=self.args.checkpoint, filename="best.pth.tar"
                 )
+                # for parallel processing setting
+                self.args.isFirstIter = False
+                self.args.load_trained_model_filename = "temp.pth.tar"
 
 
 class dotdict(dict):
     def __getattr__(self, name):
         return self[name]
+    
+    def __getstate__(self):
+        return super().__getstate__()
+    
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 
 def load_config(config_path):
@@ -426,6 +468,8 @@ def load_config(config_path):
     args.updateThreshold = config['training']['update_threshold']
     args.arenaCompare = config['training']['arena_compare']
     args.tempThreshold = config['training']['temp_threshold']
+    args.isFirstIter = config['training']['is_first_iter']
+    args.load_trained_model_filename = "temp.pth.tar" # for testing
     
     # Network params
     args.num_channels = config['network']['num_channels']
@@ -541,14 +585,14 @@ def main():
     g = game.GomokuGame(args.board_size)
 
     if args.train:
-        nnet = NNetWrapper(g, args)
+        nnetWrapper = NNetWrapper(g, args)
         if args.load_model:
             log.info(
                 'Loading checkpoint "%s/%s"...',
                 args.load_folder_file[0],
                 args.load_folder_file[1],
             )
-            nnet.load_checkpoint(args.load_folder_file[0], args.load_folder_file[1])
+            nnetWrapper.load_checkpoint(args.load_folder_file[0], args.load_folder_file[1])
             # Initialize wandb
             if args.wandb:
                 wandb.init(
@@ -593,7 +637,7 @@ def main():
                 )
 
         log.info("Loading the SelfCoach...")
-        s = SelfPlay(g, nnet, args)
+        s = SelfPlay(g, nnetWrapper, args)
 
         log.info("Starting the learning process 🎉")
         s.learn()
