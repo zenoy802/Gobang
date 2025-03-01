@@ -14,9 +14,11 @@ import yaml
 
 import game
 
-from model import GomokuNNet, MyEncoderNet
+from model import NNetWrapper
 
 import timeit
+import multiprocessing as mp
+from functools import partial
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -27,9 +29,9 @@ class MCTS:
     This class handles the MCTS tree.
     """
 
-    def __init__(self, game, nnet, args):
+    def __init__(self, game, nnetWrapper, args):
         self.game = game
-        self.nnet = nnet
+        self.nnetWrapper = nnetWrapper
         self.args = args
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
@@ -91,7 +93,7 @@ class MCTS:
 
             if s not in self.Ps:
                 # leaf node
-                self.Ps[s], v = self.nnet.predict(current_board)
+                self.Ps[s], v = self.nnetWrapper.predict(current_board)
                 valids = self.game.getValidMoves(current_board, 1)
                 self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
                 sum_Ps_s = np.sum(self.Ps[s])
@@ -174,7 +176,7 @@ class MCTS:
 
         if s not in self.Ps:
             # leaf node
-            self.Ps[s], v = self.nnet.predict(canonicalBoard)
+            self.Ps[s], v = self.nnetWrapper.predict(canonicalBoard)
             valids = self.game.getValidMoves(canonicalBoard, 1)
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
             sum_Ps_s = np.sum(self.Ps[s])
@@ -237,183 +239,31 @@ class MCTS:
         return v
 
 
-class AverageMeter(object):
-    """From https://github.com/pytorch/examples/blob/master/imagenet/main.py"""
+class TrainExamplesGenerator:
 
-    def __init__(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def __repr__(self):
-        return f"{self.avg:.2e}"
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-class NNetWrapper:
-    def __init__(self, game, args):
-        self.nnet = GomokuNNet(game, args).to(args.device)
-        # self.nnet = MyEncoderNet(game, args).to(args.device)
-        self.board_x, self.board_y = game.getBoardSize()
-        self.action_size = game.getActionSize()
-        self.args = args
-        self.device = args.device
-        
-        # Initialize optimizer
-        self.optimizer = optim.Adam(self.nnet.parameters(), lr=args.max_lr)
-        
-        # 1cycle learning rate parameters
-        self.total_steps = args.numIters * args.epochs * (args.maxlenOfQueue // args.batch_size)
-        self.current_step = 0
-
-    def get_learning_rate(self):
-        """Implement 1cycle learning rate strategy"""
-        if self.current_step >= self.total_steps:
-            return self.args.min_lr
-        
-        # Divide the total steps into two phases
-        half_cycle = self.total_steps // 2
-        
-        if self.current_step <= half_cycle:
-            # First phase: increase from min_lr to max_lr
-            phase = self.current_step / half_cycle
-            lr = self.args.min_lr + (self.args.max_lr - self.args.min_lr) * phase
-        else:
-            # Second phase: decrease from max_lr to min_lr
-            phase = (self.current_step - half_cycle) / half_cycle
-            lr = self.args.max_lr - (self.args.max_lr - self.args.min_lr) * phase
-        
-        return lr
-
-    def train(self, examples):
-        """
-        examples: list of examples, each example is of form (board, pi, v)
-        """
-        for epoch in range(self.args.epochs):
-            print("EPOCH ::: " + str(epoch + 1))
-            self.nnet.train()
-            pi_losses = AverageMeter()
-            v_losses = AverageMeter()
-
-            batch_count = int(len(examples) / self.args.batch_size)
-
-            t = tqdm(range(batch_count), desc="Training Net")
-            for _ in t:
-                # Update learning rate
-                lr = self.get_learning_rate()
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = lr
-                self.current_step += 1
-
-                sample_ids = np.random.randint(len(examples), size=self.args.batch_size)
-                boards, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = torch.FloatTensor(np.array(boards).astype(np.float32)).to(self.device)
-                # TODO: why it is target?
-                target_pis = torch.FloatTensor(np.array(pis)).to(self.device)
-                target_vs = torch.FloatTensor(np.array(vs).astype(np.float32)).to(self.device)
-
-
-                # compute output
-                out_pi, out_v = self.nnet(boards)
-                l_pi = self.loss_pi(target_pis, out_pi)
-                l_v = self.loss_v(target_vs, out_v)
-                total_loss = l_pi + l_v
-
-                # record loss
-                pi_losses.update(l_pi.item(), boards.size(0))
-                v_losses.update(l_v.item(), boards.size(0))
-                t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses, lr=f"{lr:.1e}")
-
-                # compute gradient and do SGD step
-                self.optimizer.zero_grad()
-                total_loss.backward()
-                
-                # Add gradient clipping
-                if self.args.grad_clip:
-                    torch.nn.utils.clip_grad_norm_(self.nnet.parameters(), self.args.grad_clip)
-                
-                self.optimizer.step()
-
-                if getattr(self.args, 'wandb', False):
-                    wandb.log({
-                        'learning_rate': lr,
-                        'policy_loss': l_pi.item(),
-                        'value_loss': l_v.item(),
-                        'total_loss': total_loss.item(),
-                        'current_step': self.current_step,
-                    })
-
-    def predict(self, board):
-        """
-        board: np array with board
-        """
-        # timing
-        # start = time.time()
-
-        # preparing input
-        board = torch.FloatTensor(board.astype(np.float32)).to(self.device)
-        board = board.view(1, self.board_x, self.board_y)
-        self.nnet.eval()
-        with torch.no_grad():
-            pi, v = self.nnet(board)
-
-        # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
-
-    def loss_pi(self, targets, outputs):
-        return -torch.sum(targets * outputs) / targets.size()[0]
-
-    def loss_v(self, targets, outputs):
-        return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
-
-    def save_checkpoint(self, folder="checkpoint", filename="checkpoint.pth.tar"):
-        filepath = os.path.join(folder, filename)
-        if not os.path.exists(folder):
-            print(
-                "Checkpoint Directory does not exist! Making directory {}".format(
-                    folder
-                )
-            )
-            os.mkdir(folder)
-        else:
-            print("Checkpoint Directory exists! ")
-        torch.save(
-            {
-                "state_dict": self.nnet.state_dict(),
-            },
-            filepath,
-        )
-
-    def load_checkpoint(self, folder="checkpoint", filename="checkpoint.pth.tar"):
-        folder = folder.rstrip('/')
-        filepath = os.path.join(folder, filename)
-        if not os.path.exists(filepath):
-            raise ValueError("No model in path {}".format(filepath))
-        map_location = None if self.args.cuda else "cpu"
-        if self.args.mps:
-            map_location = "mps"
-        checkpoint = torch.load(filepath, map_location=map_location, weights_only=True)
-        self.nnet.load_state_dict(checkpoint["state_dict"])
-
-
-class SelfPlay:
-    """
-    This class executes the self-play + learning.
-    """
-
-    def __init__(self, game, nnet, args):
+    def __init__(self, game, nnetWrapper, args):
         self.game = game
-        self.nnet = nnet
-        self.pnet = self.nnet.__class__(self.game, args)  # the competitor network
+        self.nnetWrapper = nnetWrapper
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.args)
-        self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
+        self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
+    
+    def __getstate__(self):
+        """Return state values to be pickled"""
+        state = self.__dict__.copy()
+        del state['nnet']
+        del state['mcts']
+        return state
+    
+    def __setstate__(self, state, model_filename=None):
+        """Restore state from the unpickled state values"""
+        self.__dict__.update(state)
+        if not model_filename:
+            self.nnetWrapper = NNetWrapper(self.game, self.args)
+            self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
+        else:
+            self.nnetWrapper = NNetWrapper(self.game, self.args)
+            self.nnetWrapper.load_checkpoint(folder=self.args.checkpoint, filename=model_filename)
+            self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
 
     def executeEpisode(self):
         """
@@ -459,14 +309,32 @@ class SelfPlay:
                     for x in trainExamples
                 ]
     
-    def generate_train_examples_sync(self):
+    def generate_train_examples_sync(self, num_episodes, worker_id):
         # examples of the iteration
         iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
-        for _ in tqdm(range(self.args.numEps), desc="Self Play"):
-            self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+        for _ in tqdm(range(num_episodes), desc=f"Self Play on worker {worker_id}"):
             iterationTrainExamples += self.executeEpisode()
         return iterationTrainExamples
 
+
+class SelfPlay:
+    """
+    This class executes the self-play + learning.
+    """
+
+    def __init__(self, game, nnetWrapper, args):
+        self.game = game
+        self.nnetWrapper = nnetWrapper
+        self.pnetWrapper = self.nnetWrapper.__class__(self.game, args)  # the competitor network
+        self.args = args
+        self.mcts = MCTS(self.game, self.nnetWrapper, self.args)
+        self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
+
+    def generate_train_examples(self):
+        generator = TrainExamplesGenerator(self.game, self.nnetWrapper, self.args)
+        iterationTrainExamples = generator.generate_train_examples_sync(self.args.numEps, 0)
+        return iterationTrainExamples
+    
     def learn(self):
         """
         Performs numIters iterations with numEps episodes of self-play in each
@@ -479,7 +347,8 @@ class SelfPlay:
         for i in range(1, self.args.numIters + 1):
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
-            iterationTrainExamples = self.generate_train_examples_sync()
+            self.mcts = MCTS(self.game, self.nnetWrapper, self.args)  # reset search tree
+            iterationTrainExamples = self.generate_train_examples()
 
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
@@ -500,7 +369,7 @@ class SelfPlay:
             shuffle(trainExamples)
 
             # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(
+            self.nnetWrapper.save_checkpoint(
                 folder=self.args.checkpoint, filename="temp.pth.tar"
             )
             self.pnet.load_checkpoint(
@@ -508,8 +377,8 @@ class SelfPlay:
             )
             pmcts = MCTS(self.game, self.pnet, self.args)
 
-            self.nnet.train(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
+            self.nnetWrapper.train(trainExamples)
+            nmcts = MCTS(self.game, self.nnetWrapper, self.args)
 
             log.info("PITTING AGAINST PREVIOUS VERSION")
             arena = game.Arena(
@@ -525,12 +394,12 @@ class SelfPlay:
                 or float(nwins) / (pwins + nwins) < self.args.updateThreshold
             ):
                 log.info("REJECTING NEW MODEL")
-                self.nnet.load_checkpoint(
+                self.nnetWrapper.load_checkpoint(
                     folder=self.args.checkpoint, filename="temp.pth.tar"
                 )
             else:
                 log.info("ACCEPTING NEW MODEL")
-                self.nnet.save_checkpoint(
+                self.nnetWrapper.save_checkpoint(
                     folder=self.args.checkpoint, filename="best.pth.tar"
                 )
 

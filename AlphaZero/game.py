@@ -86,6 +86,16 @@ class GomokuGame:
     def __init__(self, n=15):
         self.n = n
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Don't pickle the GUI
+        if 'gui' in state:
+            del state['gui']
+        return state
+    
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
     def getInitBoard(self):
         b = Board(self.n)
         return np.array(b.pieces)
