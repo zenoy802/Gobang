@@ -414,3 +414,7 @@ __pycache__/
 
 # wandb
 wandb/
+
+# model file
+*.pth
+*.pth.*

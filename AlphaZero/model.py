@@ -75,8 +75,6 @@ class MyEncoderNet(nn.Module):
         self.board_size = game.getActionSize()
         self.action_size = game.getActionSize()
         self.args = args
-        print(self.board_size)
-        print(self.args.num_heads)
 
         super(MyEncoderNet, self).__init__()
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.board_size, nhead=self.args.num_heads, 

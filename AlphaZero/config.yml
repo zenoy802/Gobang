@@ -39,5 +39,5 @@ game:
 system:
   # cuda: true  # Will be overridden by torch.cuda.is_available()
   checkpoint_dir: "./temp"
-  load_model: False
+  load_model: True
   load_folder_file: ["./temp", "best.pth.tar"] 

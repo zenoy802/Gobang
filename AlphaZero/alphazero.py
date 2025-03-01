@@ -168,8 +168,8 @@ class AverageMeter(object):
 
 class NNetWrapper:
     def __init__(self, game, args):
-        # self.nnet = GomokuNNet(game, args)
-        self.nnet = MyEncoderNet(game, args).to(args.device)
+        self.nnet = GomokuNNet(game, args).to(args.device)
+        # self.nnet = MyEncoderNet(game, args).to(args.device)
         self.board_x, self.board_y = game.getBoardSize()
         self.action_size = game.getActionSize()
         self.args = args
@@ -579,27 +579,6 @@ def main():
     g = game.GomokuGame(args.board_size)
 
     if args.train:
-        # Initialize wandb
-        if args.wandb:
-            wandb.init(
-                project=args.wandb_project,
-                entity=args.wandb_entity,
-                config={
-                    "board_size": args.board_size,
-                    "num_iterations": args.numIters,
-                    "num_episodes": args.numEps,
-                    "num_mcts_sims": args.numMCTSSims,
-                    "batch_size": args.batch_size,
-                    "num_channels": args.num_channels,
-                    "learning_rate_min": args.min_lr,
-                    "learning_rate_max": args.max_lr,
-                    "grad_clip": args.grad_clip,
-                    "epochs": args.epochs,
-                    "dropout": args.dropout,
-                },
-                resume="allow"
-            )
-
         nnet = NNetWrapper(g, args)
         if args.load_model:
             log.info(
@@ -608,6 +587,48 @@ def main():
                 args.load_folder_file[1],
             )
             nnet.load_checkpoint(args.load_folder_file[0], args.load_folder_file[1])
+            # Initialize wandb
+            if args.wandb:
+                wandb.init(
+                    project=args.wandb_project,
+                    entity=args.wandb_entity,
+                    id=args.wandb_id,
+                    config={
+                        "board_size": args.board_size,
+                        "num_iterations": args.numIters,
+                        "num_episodes": args.numEps,
+                        "num_mcts_sims": args.numMCTSSims,
+                        "batch_size": args.batch_size,
+                        "num_channels": args.num_channels,
+                        "learning_rate_min": args.min_lr,
+                        "learning_rate_max": args.max_lr,
+                        "grad_clip": args.grad_clip,
+                        "epochs": args.epochs,
+                        "dropout": args.dropout,
+                    },
+                    resume="allow"
+                )
+        else:
+            # Initialize wandb
+            if args.wandb:
+                wandb.init(
+                    project=args.wandb_project,
+                    entity=args.wandb_entity,
+                    config={
+                        "board_size": args.board_size,
+                        "num_iterations": args.numIters,
+                        "num_episodes": args.numEps,
+                        "num_mcts_sims": args.numMCTSSims,
+                        "batch_size": args.batch_size,
+                        "num_channels": args.num_channels,
+                        "learning_rate_min": args.min_lr,
+                        "learning_rate_max": args.max_lr,
+                        "grad_clip": args.grad_clip,
+                        "epochs": args.epochs,
+                        "dropout": args.dropout,
+                    },
+                    resume="allow"
+                )
 
         log.info("Loading the SelfCoach...")
         s = SelfPlay(g, nnet, args)
