@@ -16,6 +16,8 @@ import game
 
 from model import GomokuNNet, MyEncoderNet
 
+import timeit
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
@@ -47,7 +49,8 @@ class MCTS:
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for _ in range(self.args.numMCTSSims):
-            self.search(canonicalBoard)
+            self.recursion_search(canonicalBoard)
+            # self.loop_search(canonicalBoard)
 
         s = self.game.stringRepresentation(canonicalBoard)
         counts = [
@@ -67,7 +70,79 @@ class MCTS:
         probs = [x / counts_sum for x in counts]
         return probs
 
-    def search(self, canonicalBoard):
+    def loop_search(self, canonicalBoard):
+        """
+        This function performs one iteration of MCTS using a loop instead of recursion.
+        """
+        current_board = canonicalBoard
+        path = []
+
+        while True:
+            s = self.game.stringRepresentation(current_board)
+
+            if s not in self.Es:
+                self.Es[s] = self.game.getGameEnded(current_board, 1)
+            if self.Es[s] is not None:
+                v = self.Es[s]
+                break
+
+            if s not in self.Ps:
+                # leaf node
+                self.Ps[s], v = self.nnet.predict(current_board)
+                valids = self.game.getValidMoves(current_board, 1)
+                self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
+                sum_Ps_s = np.sum(self.Ps[s])
+                if sum_Ps_s > 0:
+                    self.Ps[s] /= sum_Ps_s  # renormalize
+                else:
+                    # if all valid moves were masked make all valid moves equally probable
+                    log.error("All valid moves were masked, doing a workaround.")
+                    self.Ps[s] = self.Ps[s] + valids
+                    self.Ps[s] /= np.sum(self.Ps[s])
+
+                self.Vs[s] = valids
+                self.Ns[s] = 0
+                break
+
+            valids = self.Vs[s]
+            cur_best = -float("inf")
+            best_act = -1
+
+            # pick the action with the highest upper confidence bound
+            for a in range(self.game.getActionSize()):
+                if valids[a]:
+                    u = self.Qsa.get((s, a), 0) + self.args.cpuct * self.Ps[s][
+                        a
+                    ] * math.sqrt(self.Ns[s]) / (1 + self.Nsa.get((s, a), 0))
+
+                    if u > cur_best:
+                        cur_best = u
+                        best_act = a
+
+            a = best_act
+            path.append((s, a))
+            next_s, next_player = self.game.getNextState(current_board, 1, a)
+            current_board = self.game.getCanonicalForm(next_s, next_player)
+
+        # Backpropagation phase
+        for s, a in reversed(path):
+            v = -v 
+
+            if (s, a) in self.Qsa:
+                self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (
+                    self.Nsa[(s, a)] + 1
+                )
+                self.Nsa[(s, a)] += 1
+
+            else:
+                self.Qsa[(s, a)] = v
+                self.Nsa[(s, a)] = 1
+
+            self.Ns[s] += 1
+        
+        return v
+
+    def recursion_search(self, canonicalBoard):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -131,7 +206,7 @@ class MCTS:
         next_s, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = self.game.getCanonicalForm(next_s, next_player)
 
-        v = -self.search(next_s)
+        v = -self.recursion_search(next_s)
 
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (
