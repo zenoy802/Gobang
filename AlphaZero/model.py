@@ -10,8 +10,8 @@ import wandb
 
 class NNetWrapper:
     def __init__(self, game, args):
-        self.nnet = GomokuNNet(game, args).to(args.device)
-        # self.nnet = MyEncoderNet(game, args).to(args.device)
+        # self.nnet = GomokuNNet(game, args).to(args.device)
+        self.nnet = MyEncoderNet(game, args).to(args.device)
         self.board_x, self.board_y = game.getBoardSize()
         self.action_size = game.getActionSize()
         self.args = args

@@ -24,7 +24,7 @@ network:
 # encoder parameters
 encoder:
   num_blocks: 4
-  num_heads: 8
+  num_heads: 4
   hidden_dim: 512
   dropout: 0.1
 
