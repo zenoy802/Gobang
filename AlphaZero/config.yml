@@ -9,7 +9,7 @@ training:
   update_threshold: 0.55
   arena_compare: 40
   temp_threshold: 15
-  is_first_iter: False
+  is_first_iter: True
 
 # Neural Network parameters
 network:

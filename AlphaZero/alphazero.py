@@ -437,7 +437,7 @@ class SelfPlay:
                 )
                 # for parallel processing setting
                 self.args.isFirstIter = False
-                self.args.load_trained_model_filename = "temp.pth.tar"
+                self.args.load_trained_model_filename = "best.pth.tar"
 
 
 class dotdict(dict):
@@ -469,7 +469,6 @@ def load_config(config_path):
     args.arenaCompare = config['training']['arena_compare']
     args.tempThreshold = config['training']['temp_threshold']
     args.isFirstIter = config['training']['is_first_iter']
-    args.load_trained_model_filename = "temp.pth.tar" # for testing
     
     # Network params
     args.num_channels = config['network']['num_channels']
@@ -667,4 +666,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
     main()
