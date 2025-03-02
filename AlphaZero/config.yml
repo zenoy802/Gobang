@@ -1,6 +1,6 @@
 # Training parameters
 training:
-  epochs: 10
+  epochs: 20
   batch_size: 256
   num_iterations: 200  # numIters
   num_episodes: 100    # numEps
@@ -35,7 +35,7 @@ mcts:
 
 # Game parameters
 game:
-  board_size: 8
+  board_size: 16
 
 # System parameters
 system:
