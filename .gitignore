@@ -418,3 +418,6 @@ wandb/
 # model file
 *.pth
 *.pth.*
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints
