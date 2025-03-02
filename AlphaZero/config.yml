@@ -2,7 +2,7 @@
 training:
   epochs: 20
   batch_size: 256
-  num_iterations: 200  # numIters
+  num_iterations: 25  # numIters
   num_episodes: 100    # numEps
   max_queue_length: 200000  # maxlenOfQueue
   num_iters_history: 20     # numItersForTrainExamplesHistory
