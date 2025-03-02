@@ -52,8 +52,8 @@ class MCTS:
         """
         startTime = timeit.default_timer()
         for _ in range(self.args.numMCTSSims):
-            self.recursion_search(canonicalBoard)
-            # self.loop_search(canonicalBoard)
+            # self.recursion_search(canonicalBoard)
+            self.loop_search(canonicalBoard)
         endTime = timeit.default_timer()
         # print(f"search time {endTime - startTime}")
 
@@ -114,15 +114,27 @@ class MCTS:
             best_act = -1
 
             # pick the action with the highest upper confidence bound
-            for a in range(self.game.getActionSize()):
-                if valids[a]:
-                    u = self.Qsa.get((s, a), 0) + self.args.cpuct * self.Ps[s][
-                        a
-                    ] * math.sqrt(self.Ns[s]) / (1 + self.Nsa.get((s, a), 0))
+            # for a in range(self.game.getActionSize()):
+            #     if valids[a]:
+            #         u = self.Qsa.get((s, a), 0) + self.args.cpuct * self.Ps[s][
+            #             a
+            #         ] * math.sqrt(self.Ns[s]) / (1 + self.Nsa.get((s, a), 0))
 
-                    if u > cur_best:
-                        cur_best = u
-                        best_act = a
+            #         if u > cur_best:
+            #             cur_best = u
+            #             best_act = a
+
+            # SIMD (vectorized) implementation of PUTC values
+            action_size = self.game.getActionSize()
+            Q_values = np.zeros(action_size, dtype=np.float32)
+            N_visits = np.zeros(action_size, dtype=np.float32)
+            for a in range(action_size):
+                Q_values[a] = float(self.Qsa.get((s, a), 0))
+                N_visits[a] = float(self.Nsa.get((s, a), 0))
+            U = Q_values + self.args.cpuct * self.Ps[s] * np.sqrt(self.Ns[s]) / (1 + N_visits)
+            # masking invalid moves
+            U = np.where(valids, U, -np.inf)
+            best_act = np.argmax(U)
 
             a = best_act
             path.append((s, a))
